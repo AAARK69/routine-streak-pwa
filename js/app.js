@@ -928,22 +928,26 @@ function initKeyboardKeybindings() {
       return;
     }
 
+    // Bypass keybindings if a modifier key (Cmd, Ctrl, Alt) is pressed to prevent hijacking copy/paste/save/minimize
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
     if (isInput) return;
 
     const key = e.key.toUpperCase();
     
-    if (key === '1' || key === 'T') {
-      e.preventDefault();
-      transitionToTab('tab-timeline');
-    } else if (key === '2' || key === 'M') {
-      e.preventDefault();
-      transitionToTab('tab-matrix');
-    } else if (key === '3' || key === 'S') {
-      e.preventDefault();
-      transitionToTab('tab-streaks');
-    } else if (key === '4' || key === 'C') {
+    // Map keys so 1-5 maps to visual left-to-right tab ordering, and letters match naturally
+    if (key === '1' || key === 'C') {
       e.preventDefault();
       transitionToTab('tab-calendar');
+    } else if (key === '2' || key === 'T') {
+      e.preventDefault();
+      transitionToTab('tab-timeline');
+    } else if (key === '3' || key === 'M') {
+      e.preventDefault();
+      transitionToTab('tab-matrix');
+    } else if (key === '4' || key === 'S') {
+      e.preventDefault();
+      transitionToTab('tab-streaks');
     } else if (key === '5' || key === 'D') {
       e.preventDefault();
       transitionToTab('tab-settings');

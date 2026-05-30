@@ -1164,3 +1164,152 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-gray);
   margin-bottom: 24px;
 }
+
+/* Streaks Subview Toggle & 12-Month Calendar Grid themed styles */
+.streaks-toggle-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.toggle-btn {
+  background: var(--bg-black);
+  border: 1px solid #1c1c28;
+  color: var(--text-gray);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:hover {
+  border-color: var(--text-gray);
+  color: var(--text-white);
+}
+
+.toggle-btn.active {
+  background: var(--bg-card);
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
+}
+
+.streaks-subview {
+  display: none;
+}
+
+.streaks-subview.active {
+  display: block;
+}
+
+/* 12-Month Annual Layout */
+.year-grid-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.month-card {
+  background: rgba(13, 13, 17, 0.4);
+  border: 1px solid #1c1c28;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s ease;
+}
+
+.month-card:hover {
+  border-color: var(--text-dim);
+}
+
+.month-title {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--text-white);
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid #121218;
+  padding-bottom: 4px;
+}
+
+.calendar-days-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  font-weight: 800;
+}
+
+.calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-day-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 4px;
+  background: var(--bg-input);
+  border: 1px solid #101014;
+  color: var(--text-gray);
+  transition: all 0.15s ease;
+  position: relative;
+  cursor: default;
+}
+
+.calendar-day-cell.empty {
+  border: none;
+  background: transparent;
+}
+
+.calendar-day-cell.completed {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 6px rgba(0, 240, 255, 0.1);
+}
+
+.calendar-day-cell.missed {
+  background: rgba(255, 45, 85, 0.15);
+  border-color: var(--neon-pink);
+  color: var(--neon-pink);
+  box-shadow: 0 0 6px rgba(255, 45, 85, 0.1);
+}
+
+.calendar-day-symbol {
+  font-size: 0.5rem;
+  font-weight: 800;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+.month-completion-footer {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-align: right;
+  margin-top: 4px;
+}
+
+.month-completion-footer.highlight-yield {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 4px var(--neon-cyan-glow);
+}

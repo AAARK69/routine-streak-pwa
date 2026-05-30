@@ -3,7 +3,7 @@
  */
 import { getStorageState, saveStorageState, exportStateToFile, importStateFromString, resetStateToMock, clearAllState } from './storage.js';
 import { optimizeAllSchedules } from './scheduler.js';
-import { renderTimeline, renderMatrix, renderStreaks, renderTopBarStats } from './ui.js';
+import { renderTimeline, renderMatrix, renderStreaks, renderTopBarStats, renderYearGrid } from './ui.js';
 
 // App State
 let state = getStorageState();
@@ -58,7 +58,12 @@ function refreshAllUI() {
   } else if (currentTab === 'view-matrix') {
     renderMatrix(selectedDay, state, handleOpenEditModal);
   } else if (currentTab === 'view-streaks') {
-    renderStreaks(state);
+    const isYearGridActive = document.getElementById('btn-toggle-yeargrid').classList.contains('active');
+    if (isYearGridActive) {
+      renderYearGrid(state);
+    } else {
+      renderStreaks(state);
+    }
   }
   
   // Check if daily routines completed for a celebratory overlay trigger
@@ -126,6 +131,30 @@ function initAppNavigation() {
   document.getElementById('btn-dismiss-celebration').addEventListener('click', () => {
     document.getElementById('confetti-screen').classList.remove('active');
   });
+
+  // 4. Year Grid Toggle Buttons inside Streaks Tab
+  const btnHeatmap = document.getElementById('btn-toggle-heatmap');
+  const btnYearGrid = document.getElementById('btn-toggle-yeargrid');
+  const viewHeatmap = document.getElementById('streaks-heatmap-view');
+  const viewYearGrid = document.getElementById('streaks-yeargrid-view');
+
+  if (btnHeatmap && btnYearGrid) {
+    btnHeatmap.addEventListener('click', () => {
+      btnHeatmap.classList.add('active');
+      btnYearGrid.classList.remove('active');
+      viewHeatmap.classList.add('active');
+      viewYearGrid.classList.remove('active');
+      refreshAllUI();
+    });
+
+    btnYearGrid.addEventListener('click', () => {
+      btnYearGrid.classList.add('active');
+      btnHeatmap.classList.remove('active');
+      viewYearGrid.classList.add('active');
+      viewHeatmap.classList.remove('active');
+      refreshAllUI();
+    });
+  }
 }
 
 /**

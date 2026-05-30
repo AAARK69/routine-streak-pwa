@@ -382,3 +382,117 @@ export function renderTopBarStats(state) {
     isAllClearToday: countScheduled > 0 && countCompleted === countScheduled
   };
 }
+
+/**
+ * Render 12-Month Themed Annual Calendar grid (Cyberpunk High-Contrast version of user goal sheet)
+ */
+export function renderYearGrid(state) {
+  const container = document.getElementById('year-calendar-grid');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const MONTHS = [
+    { name: 'JANUARY', days: 31 },
+    { name: 'FEBRUARY', days: 28 }, // 2026 is non-leap
+    { name: 'MARCH', days: 31 },
+    { name: 'APRIL', days: 30 },
+    { name: 'MAY', days: 31 },
+    { name: 'JUNE', days: 30 },
+    { name: 'JULY', days: 31 },
+    { name: 'AUGUST', days: 31 },
+    { name: 'SEPTEMBER', days: 30 },
+    { name: 'OCTOBER', days: 31 },
+    { name: 'NOVEMBER', days: 30 },
+    { name: 'DECEMBER', days: 31 }
+  ];
+
+  const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  let annualBlueDays = 0;
+
+  MONTHS.forEach((month, mIndex) => {
+    const monthCard = document.createElement('div');
+    monthCard.className = 'month-card';
+
+    // Calculate starting weekday for 2026
+    const firstDayOfWeek = new Date(2026, mIndex, 1).getDay();
+
+    let daysHtml = '';
+    
+    // 1. Render empty grid cells for padding
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      daysHtml += '<span class="calendar-day-cell empty"></span>';
+    }
+
+    let scheduledDaysInMonth = 0;
+    let completedDaysInMonth = 0;
+
+    // 2. Render actual calendar days (1 to month.days)
+    for (let day = 1; day <= month.days; day++) {
+      const cellDate = new Date(2026, mIndex, day);
+      const dow = cellDate.getDay();
+      const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      
+      const isFuture = cellDate > todayMidnight;
+      const scheduledRoutines = state.routines.filter(r => r.days.includes(dow));
+      const completedRoutines = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+
+      let cellClass = '';
+      let symbol = '';
+
+      if (scheduledRoutines.length > 0) {
+        if (isFuture) {
+          cellClass = 'future';
+          symbol = '';
+        } else {
+          scheduledDaysInMonth++;
+          if (completedRoutines.length > 0) {
+            cellClass = 'completed';
+            symbol = '✓';
+            completedDaysInMonth++;
+            annualBlueDays++;
+          } else {
+            cellClass = 'missed';
+            symbol = '🗙';
+          }
+        }
+      } else {
+        // Neutral day (no routines scheduled)
+        if (isFuture) cellClass = 'future';
+      }
+
+      daysHtml += `
+        <span class="calendar-day-cell ${cellClass}">
+          ${day}
+          ${symbol ? `<span class="calendar-day-symbol">${symbol}</span>` : ''}
+        </span>
+      `;
+    }
+
+    // Calculate month yield percentage
+    const monthYield = scheduledDaysInMonth > 0 ? Math.round((completedDaysInMonth / scheduledDaysInMonth) * 100) : 0;
+    const highlightClass = monthYield > 50 ? 'highlight-yield' : '';
+
+    monthCard.innerHTML = `
+      <h4 class="month-title">${month.name}</h4>
+      <div class="calendar-days-row">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+      </div>
+      <div class="calendar-month-grid">
+        ${daysHtml}
+      </div>
+      <div class="month-completion-footer ${highlightClass}">
+        ${monthYield}% Positive
+      </div>
+    `;
+
+    container.appendChild(monthCard);
+  });
+
+  // Update top title summary (e.g. "Annual Goal Progress: 24 Blue Days")
+  const titleVal = document.getElementById('annual-goal-subtitle');
+  if (titleVal) {
+    titleVal.textContent = `Annual Goal Progress: ${annualBlueDays} Completed Blue Days`;
+  }
+}

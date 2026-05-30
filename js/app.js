@@ -1,7 +1,7 @@
 /**
  * Main Application Orchestrator
  */
-import { getStorageState, saveStorageState, exportStateToFile, importStateFromString, resetStateToMock, clearAllState, getDailyNote, saveDailyNote } from './storage.js';
+import { getStorageState, saveStorageState, exportStateToFile, importStateFromString, resetStateToMock, clearAllState, getDailyNote, saveDailyNote, syncChannel } from './storage.js';
 import { optimizeAllSchedules } from './scheduler.js';
 import { renderTimeline, renderMatrix, renderStreaks, renderTopBarStats, renderYearGrid } from './ui.js';
 import { playClick, playChime, playSweep, toggleMute, isMuted } from './audio.js';
@@ -33,8 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   state = await getStorageState();
 
   // Set up BroadcastChannel listener for cross-tab synchronization
-  if ('BroadcastChannel' in window) {
-    const syncChannel = new BroadcastChannel('aether_state_sync');
+  if (syncChannel) {
     let syncDebounceTimeout = null;
     syncChannel.onmessage = (event) => {
       if (syncDebounceTimeout) {
@@ -473,6 +472,15 @@ function initDataConsoleControls() {
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Security: Reject files over 1MB to prevent DoS / main-thread blocking from large malicious backups
+    const MAX_BACKUP_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
+    if (file.size > MAX_BACKUP_SIZE_BYTES) {
+      statusLabel.textContent = `⚠️ File too large (${(file.size / 1024).toFixed(0)}KB). Max allowed backup size is 1MB.`;
+      statusLabel.className = 'import-status-text text-accent-pink';
+      fileInput.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -996,6 +1004,13 @@ async function loadCurrentDailyNote() {
   }
 
   const noteText = await getDailyNote(dateStr);
+  
+  // Prevent overwriting if the user is actively typing/focused on it in this tab
+  if (document.activeElement === textarea && textarea.value !== (noteText || "")) {
+    console.log('[App Sync] Daily note updated in another tab, but skipped overwrite to prevent cursor disruption since this field is focused.');
+    return;
+  }
+  
   textarea.value = noteText || "";
 }
 
@@ -1033,5 +1048,22 @@ function initDailyNotes() {
         }, 2000);
       }
     }, 500);
+  });
+
+  // Flush pending note saves immediately on tab close/hide to prevent data loss
+  const flushPendingNoteSave = () => {
+    const textarea = document.getElementById('daily-notes-textarea');
+    if (!textarea || !debounceTimeout) return;
+    clearTimeout(debounceTimeout);
+    debounceTimeout = null;
+    const dateStr = getSelectedDateString();
+    saveDailyNote(dateStr, textarea.value); // Fire without await — best-effort sync flush
+  };
+
+  // pagehide fires reliably on mobile Safari and all modern browsers before tab unload
+  window.addEventListener('pagehide', flushPendingNoteSave);
+  // visibilitychange catches backgrounding on iOS (swipe-away) where pagehide is not always dispatched
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingNoteSave();
   });
 }

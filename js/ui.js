@@ -2,6 +2,7 @@
  * UI Renderer Module
  */
 import { getBlockForHour, checkConflictsForDay, calculateStreak } from './scheduler.js';
+import { playThemeChange } from './audio.js';
 
 // Color map for categories
 export const CATEGORY_COLORS = {
@@ -10,6 +11,21 @@ export const CATEGORY_COLORS = {
   Work: '#ff9500',      // Neon Orange
   Leisure: '#ff6b8b'    // Neon Pink (Satisfies WCAG AAA >7:1)
 };
+
+/**
+ * XSS Sanitization Utility
+ * Escapes all user-supplied strings before injecting into innerHTML templates.
+ * Prevents DOM-based XSS from routine names, conflict groups, or voice command inputs.
+ */
+function escapeHTML(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 /**
  * Format minutes into readable HH:MM 24h string
@@ -23,7 +39,6 @@ function formatHour(hour) {
  */
 export function renderTimeline(day, state, onToggleComplete, onEditClick, activeCategoryFilter = 'All') {
   const container = document.getElementById('timeline-list');
-  container.innerHTML = '';
 
   const todayStr = new Date().toISOString().split('T')[0];
   let activeRoutines = state.routines.filter(r => r.days.includes(day));
@@ -46,6 +61,8 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
     return;
   }
 
+  const fragment = document.createDocumentFragment();
+
   activeRoutines.forEach((rt, index) => {
     const isCompleted = (state.completions[todayStr] || []).includes(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
@@ -65,7 +82,7 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
           <span class="connector-badge" role="status" aria-label="Habit stacking connector: ${gapMin} minutes gap between ${prevRt.name} and ${rt.name}">✨ STACKED ✨ (${gapMin} min gap)</span>
           <div class="connector-line"></div>
         `;
-        container.appendChild(connector);
+        fragment.appendChild(connector);
       }
     }
 
@@ -81,20 +98,20 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
 
     card.innerHTML = `
       <div class="routine-card-left">
-        <label class="custom-checkbox-wrapper" id="check-wrapper-${rt.id}">
-          <input type="checkbox" class="custom-checkbox-input" id="check-${rt.id}" ${isCompleted ? 'checked' : ''} aria-label="Mark ${rt.name} as completed">
+        <label class="custom-checkbox-wrapper" id="check-wrapper-${escapeHTML(rt.id)}">
+          <input type="checkbox" class="custom-checkbox-input" id="check-${escapeHTML(rt.id)}" ${isCompleted ? 'checked' : ''} aria-label="Mark ${escapeHTML(rt.name)} as completed">
           <span class="checkbox-visual"></span>
         </label>
         
         <div class="routine-info">
-          <h3 class="routine-title">${rt.name}</h3>
+          <h3 class="routine-title">${escapeHTML(rt.name)}</h3>
           
           <div class="routine-meta-row">
             <span class="badge-outline">${formatHour(rt.targetHour)}</span>
-            <span class="badge-solid-dark">${rt.duration} mins</span>
-            <span class="badge-solid-dark">${rt.category}</span>
-            ${rt.conflictGroup ? `<span class="badge-outline" style="border-style: dashed; opacity: 0.7;">${rt.conflictGroup}</span>` : ''}
-            <div class="energy-indicator" title="Energy: ${rt.energy}/5">
+            <span class="badge-solid-dark">${escapeHTML(String(rt.duration))} mins</span>
+            <span class="badge-solid-dark">${escapeHTML(rt.category)}</span>
+            ${rt.conflictGroup ? `<span class="badge-outline" style="border-style: dashed; opacity: 0.7;">${escapeHTML(rt.conflictGroup)}</span>` : ''}
+            <div class="energy-indicator" title="Energy: ${escapeHTML(String(rt.energy))}/5">
               ${energyPips}
             </div>
           </div>
@@ -102,7 +119,7 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
       </div>
 
       <div class="routine-card-actions">
-        <button class="btn-edit" id="edit-${rt.id}" aria-label="Edit routine: ${rt.name}">⚙</button>
+        <button class="btn-edit" id="edit-${escapeHTML(rt.id)}" aria-label="Edit routine: ${escapeHTML(rt.name)}">⚙</button>
       </div>
     `;
 
@@ -118,8 +135,11 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
       onEditClick(rt);
     });
 
-    container.appendChild(card);
+    fragment.appendChild(card);
   });
+
+  container.innerHTML = '';
+  container.appendChild(fragment);
 }
 
 /**
@@ -128,17 +148,20 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
 export function renderMatrix(day, state, onEditClick) {
   // 1. Render conflicts list
   const feed = document.getElementById('matrix-conflict-feed');
-  feed.innerHTML = '';
-
+  
   const { conflicts, warnings, successes = [] } = checkConflictsForDay(day, state.routines);
   
+  const feedFragment = document.createDocumentFragment();
+
   if (conflicts.length === 0 && warnings.length === 0) {
-    feed.innerHTML = `
-      <div class="conflict-alert" style="background: rgba(0, 255, 136, 0.05); border: 1px dashed var(--neon-green); color: var(--neon-green)">
-        <span class="conflict-alert-icon">✓</span>
-        <span>Schedule matrix fully optimized! Zero overlapping fatigue groups detected for today.</span>
-      </div>
+    const alert = document.createElement('div');
+    alert.className = 'conflict-alert';
+    alert.style.cssText = 'background: rgba(0, 255, 136, 0.05); border: 1px dashed var(--neon-green); color: var(--neon-green)';
+    alert.innerHTML = `
+      <span class="conflict-alert-icon">✓</span>
+      <span>Schedule matrix fully optimized! Zero overlapping fatigue groups detected for today.</span>
     `;
+    feedFragment.appendChild(alert);
   } else {
     // Show errors first
     conflicts.forEach(c => {
@@ -148,7 +171,7 @@ export function renderMatrix(day, state, onEditClick) {
         <span class="conflict-alert-icon">⚠️</span>
         <span>${c.message}</span>
       `;
-      feed.appendChild(alert);
+      feedFragment.appendChild(alert);
     });
 
     // Show warnings
@@ -159,7 +182,7 @@ export function renderMatrix(day, state, onEditClick) {
         <span class="conflict-alert-icon">⚡</span>
         <span>${w.message}</span>
       `;
-      feed.appendChild(alert);
+      feedFragment.appendChild(alert);
     });
   }
 
@@ -171,14 +194,17 @@ export function renderMatrix(day, state, onEditClick) {
       <span class="conflict-alert-icon">✨</span>
       <span>${s.message}</span>
     `;
-    feed.appendChild(alert);
+    feedFragment.appendChild(alert);
   });
+
+  feed.innerHTML = '';
+  feed.appendChild(feedFragment);
 
   // 2. Render 24-hour rows
   const gridContainer = document.getElementById('matrix-grid-hours');
-  gridContainer.innerHTML = '';
 
   const activeRoutines = state.routines.filter(r => r.days.includes(day));
+  const gridFragment = document.createDocumentFragment();
 
   for (let hour = 0; hour < 24; hour++) {
     const row = document.createElement('div');
@@ -221,8 +247,11 @@ export function renderMatrix(day, state, onEditClick) {
       }
     });
 
-    gridContainer.appendChild(row);
+    gridFragment.appendChild(row);
   }
+
+  gridContainer.innerHTML = '';
+  gridContainer.appendChild(gridFragment);
 }
 
 /**
@@ -271,7 +300,7 @@ export function renderStreaks(state) {
 
   // 2. Renders 30-Day Activity Grid Heatmap
   const heatmapGrid = document.getElementById('streak-heatmap-grid');
-  heatmapGrid.innerHTML = '';
+  const heatmapFragment = document.createDocumentFragment();
 
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
@@ -298,12 +327,14 @@ export function renderStreaks(state) {
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
 
-    heatmapGrid.appendChild(cell);
+    heatmapFragment.appendChild(cell);
   }
+
+  heatmapGrid.innerHTML = '';
+  heatmapGrid.appendChild(heatmapFragment);
 
   // 3. Render Individual Routine Streak Badges
   const streakContainer = document.getElementById('routine-streaks-container');
-  streakContainer.innerHTML = '';
 
   if (state.routines.length === 0) {
     streakContainer.innerHTML = `
@@ -311,6 +342,8 @@ export function renderStreaks(state) {
     `;
     return;
   }
+
+  const streakFragment = document.createDocumentFragment();
 
   // Sort routines by priority / streak
   const sortedRoutines = [...state.routines].sort((a, b) => {
@@ -342,8 +375,11 @@ export function renderStreaks(state) {
       </div>
     `;
 
-    streakContainer.appendChild(card);
+    streakFragment.appendChild(card);
   });
+
+  streakContainer.innerHTML = '';
+  streakContainer.appendChild(streakFragment);
 }
 
 /**
@@ -441,7 +477,6 @@ export function renderYearGrid(state) {
   // 1. Render Columns Decode Legend Key at the top
   const legendList = document.getElementById('calendar-legend-list');
   if (legendList) {
-    legendList.innerHTML = '';
     if (state.routines.length === 0) {
       legendList.innerHTML = `
         <span style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);">
@@ -449,6 +484,7 @@ export function renderYearGrid(state) {
         </span>
       `;
     } else {
+      const legendFragment = document.createDocumentFragment();
       // Sort routines consistently by ID so column mappings are stable in every cell!
       const sortedRoutines = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
       sortedRoutines.forEach((rt, index) => {
@@ -457,14 +493,15 @@ export function renderYearGrid(state) {
         chip.className = 'legend-col-chip';
         chip.style.setProperty('--accent-color', color);
         chip.textContent = `Col ${index + 1}: ${rt.name}`;
-        legendList.appendChild(chip);
+        legendFragment.appendChild(chip);
       });
+      legendList.innerHTML = '';
+      legendList.appendChild(legendFragment);
     }
   }
 
   const container = document.getElementById('year-calendar-grid');
   if (!container) return;
-  container.innerHTML = '';
 
   const MONTHS = [
     { name: 'JANUARY', days: 31 },
@@ -488,6 +525,8 @@ export function renderYearGrid(state) {
   
   // Sort routines consistently for day-cells as well!
   const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
+
+  const yearFragment = document.createDocumentFragment();
 
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
@@ -583,8 +622,11 @@ export function renderYearGrid(state) {
       </div>
     `;
 
-    container.appendChild(monthCard);
+    yearFragment.appendChild(monthCard);
   });
+
+  container.innerHTML = '';
+  container.appendChild(yearFragment);
 
   // Update top title summary (e.g. "Annual Goal Progress: 24 Completed Blue Days")
   const titleVal = document.getElementById('annual-goal-subtitle');
@@ -634,17 +676,7 @@ export function initThemeEngine() {
       
       // Play high-tech switch beep sound if available
       try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(themeName === 'crt' ? 800 : 1200, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.1);
+        playThemeChange(themeName);
       } catch (e) {
         // AudioContext blocked or not supported
       }

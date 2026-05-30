@@ -101,6 +101,11 @@ export function playClick() {
   osc1.start(now);
   osc1.stop(now + 0.015);
   
+  osc1.onended = () => {
+    osc1.disconnect();
+    gain1.disconnect();
+  };
+  
   // 2. Plastic click noise transient
   const noiseSource = ctx.createBufferSource();
   noiseSource.buffer = getNoiseBuffer(ctx);
@@ -120,6 +125,12 @@ export function playClick() {
   
   noiseSource.start(now);
   noiseSource.stop(now + 0.008);
+
+  noiseSource.onended = () => {
+    noiseSource.disconnect();
+    noiseFilter.disconnect();
+    noiseGain.disconnect();
+  };
 }
 
 /**
@@ -164,6 +175,13 @@ function playChimeNote(freq, startTime, duration) {
   
   osc1.stop(startTime + duration);
   osc2.stop(startTime + duration);
+
+  osc1.onended = () => {
+    osc1.disconnect();
+    osc2.disconnect();
+    filter.disconnect();
+    gainNode.disconnect();
+  };
 }
 
 /**
@@ -254,7 +272,55 @@ export function playSweep() {
     
     osc1.stop(now + duration);
     osc2.stop(now + duration);
+
+    if (idx === 0) {
+      osc1.onended = () => {
+        osc1.disconnect();
+        osc2.disconnect();
+        sawGain.disconnect();
+        filter.disconnect();
+        masterGain.disconnect();
+      };
+    } else {
+      osc1.onended = () => {
+        osc1.disconnect();
+        osc2.disconnect();
+        sawGain.disconnect();
+      };
+    }
   });
+}
+
+/**
+ * Plays a high-tech feedback beep when the user switches app theme
+ */
+export function playThemeChange(themeName) {
+  if (muted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  if (ctx.state === 'suspended') {
+    initAudio();
+    return;
+  }
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(themeName === 'crt' ? 800 : 1200, now);
+  gain.gain.setValueAtTime(0.05, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  
+  osc.start(now);
+  osc.stop(now + 0.1);
+
+  osc.onended = () => {
+    osc.disconnect();
+    gain.disconnect();
+  };
 }
 
 /**

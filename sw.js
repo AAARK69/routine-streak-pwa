@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aether-cache-v11';
+const CACHE_NAME = 'aether-cache-v12';
 const ASSETS = [
   './',
   'index.html',
@@ -60,13 +60,20 @@ self.addEventListener('fetch', (e) => {
         const isAppAsset = ASSET_URLS.has(requestUrl);
         const isFont = e.request.url.includes('fonts.googleapis.com') || e.request.url.includes('fonts.gstatic.com');
 
+        const isSuccess = networkResponse.status === 200;
+        const isOpaque = networkResponse.status === 0;
+
         if (
-          networkResponse.status === 200 &&
-          (isAppAsset || isFont)
+          (isSuccess && (isAppAsset || isFont)) ||
+          (isOpaque && isFont)
         ) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(e.request, responseClone);
+            cache.put(e.request, responseClone).catch(err => {
+              console.error('[Service Worker] Failed to write to cache', err);
+            });
+          }).catch(err => {
+            console.error('[Service Worker] Failed to open cache', err);
           });
         }
         return networkResponse;
@@ -74,7 +81,9 @@ self.addEventListener('fetch', (e) => {
     }).catch(() => {
       // Graceful offline fallback: if navigation fails, return app shell index.html
       if (e.request.mode === 'navigate') {
-        return caches.match('./') || caches.match('index.html');
+        return caches.match('./').then((response) => {
+          return response || caches.match('index.html');
+        });
       }
     })
   );

@@ -125,6 +125,16 @@ const DB_VERSION = 2;
 let dbPromise = null;
 let useLocalStorageFallback = false;
 
+// 3-Tier Storage Fallback (IndexedDB -> LocalStorage -> InMemory)
+const inMemoryCache = {
+  state: null,
+  notes: new Map()
+};
+
+// Sequential Transaction Write Chains to Coalesce High-Frequency Operations
+let notesWriteChain = Promise.resolve();
+let stateWriteChain = Promise.resolve();
+
 function getDB() {
   if (dbPromise) return dbPromise;
   
@@ -146,13 +156,26 @@ function getDB() {
       };
       
       request.onsuccess = (event) => {
-        resolve(event.target.result);
+        const db = event.target.result;
+        
+        // Prevent database connection blocks when upgraded in another tab
+        db.onversionchange = () => {
+          db.close();
+          console.warn("IndexedDB version changed elsewhere. Database connection closed.");
+          dbPromise = null;
+        };
+        
+        resolve(db);
       };
       
       request.onerror = (event) => {
         console.error("IndexedDB open error:", event.target.error);
         useLocalStorageFallback = true;
         reject(event.target.error);
+      };
+
+      request.onblocked = () => {
+        console.warn("IndexedDB open request blocked by an open connection in another tab.");
       };
     } catch (e) {
       console.error("IndexedDB open exception:", e);
@@ -164,17 +187,8 @@ function getDB() {
   return dbPromise;
 }
 
-// Read a daily note from the notes store
-export async function getDailyNote(dateStr) {
-  if (useLocalStorageFallback) {
-    try {
-      return localStorage.getItem(`aether_pwa_note_${dateStr}`) || "";
-    } catch (err) {
-      console.error("Error reading daily note from LocalStorage fallback", err);
-      return "";
-    }
-  }
-
+// Inner helper to perform daily note reading from IDB
+async function performGetDailyNote(dateStr) {
   try {
     const db = await getDB();
     return new Promise((resolve, reject) => {
@@ -183,37 +197,50 @@ export async function getDailyNote(dateStr) {
       const request = store.get(dateStr);
       
       request.onsuccess = () => {
-        if (request.result) {
-          resolve(request.result.text || "");
-        } else {
-          resolve("");
-        }
+        resolve(request.result ? (request.result.text || "") : "");
       };
       
       request.onerror = () => {
-        reject(request.error);
+        reject(request.error || new Error("Failed to get note"));
+      };
+
+      transaction.onerror = (e) => {
+        reject(transaction.error || e.target.error || new Error("Transaction error"));
+      };
+
+      transaction.onabort = () => {
+        reject(new Error("Transaction aborted"));
       };
     });
   } catch (err) {
     console.error("Error reading daily note from IndexedDB, switching to LocalStorage", err);
     useLocalStorageFallback = true;
-    return localStorage.getItem(`aether_pwa_note_${dateStr}`) || "";
+    return getFallbackDailyNote(dateStr);
   }
 }
 
-// Save a daily note to the notes store and notify other tabs
-export async function saveDailyNote(dateStr, noteText) {
+// Fallback reader helper for LocalStorage -> InMemory Cache
+function getFallbackDailyNote(dateStr) {
+  try {
+    return localStorage.getItem(`aether_pwa_note_${dateStr}`) || "";
+  } catch (err) {
+    console.warn("LocalStorage blocked, fallback to InMemoryCache for reading note:", err);
+    return inMemoryCache.notes.get(dateStr) || "";
+  }
+}
+
+// Read a daily note from the notes store
+export async function getDailyNote(dateStr) {
   if (useLocalStorageFallback) {
-    try {
-      localStorage.setItem(`aether_pwa_note_${dateStr}`, noteText);
-      if (syncChannel) {
-        syncChannel.postMessage({ type: 'NOTE_UPDATED', date: dateStr });
-      }
-      return true;
-    } catch (err) {
-      console.error("Error saving daily note to LocalStorage", err);
-      return false;
-    }
+    return getFallbackDailyNote(dateStr);
+  }
+  return performGetDailyNote(dateStr);
+}
+
+// Inner helper to perform daily note saving to IDB
+async function performSaveDailyNote(dateStr, noteText) {
+  if (useLocalStorageFallback) {
+    return saveFallbackDailyNote(dateStr, noteText);
   }
 
   try {
@@ -228,7 +255,15 @@ export async function saveDailyNote(dateStr, noteText) {
       };
       
       request.onerror = () => {
-        reject(request.error);
+        reject(request.error || new Error("Failed to put note"));
+      };
+
+      transaction.onerror = (e) => {
+        reject(transaction.error || e.target.error || new Error("Transaction error"));
+      };
+
+      transaction.onabort = () => {
+        reject(new Error("Transaction aborted"));
       };
     });
 
@@ -239,17 +274,34 @@ export async function saveDailyNote(dateStr, noteText) {
   } catch (err) {
     console.error("Error saving daily note to IndexedDB, switching to LocalStorage", err);
     useLocalStorageFallback = true;
-    try {
-      localStorage.setItem(`aether_pwa_note_${dateStr}`, noteText);
-      if (syncChannel) {
-        syncChannel.postMessage({ type: 'NOTE_UPDATED', date: dateStr });
-      }
-      return true;
-    } catch (fallbackErr) {
-      console.error("Error saving daily note to LocalStorage fallback", fallbackErr);
-      return false;
-    }
+    return saveFallbackDailyNote(dateStr, noteText);
   }
+}
+
+// Fallback writer helper for LocalStorage -> InMemory Cache
+function saveFallbackDailyNote(dateStr, noteText) {
+  try {
+    localStorage.setItem(`aether_pwa_note_${dateStr}`, noteText);
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'NOTE_UPDATED', date: dateStr });
+    }
+    return true;
+  } catch (err) {
+    console.warn("LocalStorage saving blocked, fallback to InMemoryCache for note:", err);
+    inMemoryCache.notes.set(dateStr, noteText);
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'NOTE_UPDATED', date: dateStr });
+    }
+    return true;
+  }
+}
+
+// Save a daily note to the notes store and notify other tabs (Serialized sequence)
+export async function saveDailyNote(dateStr, noteText) {
+  // Coalesce high-frequency write requests into a sequential queue chain
+  const promise = notesWriteChain.then(() => performSaveDailyNote(dateStr, noteText));
+  notesWriteChain = promise.then(() => {}).catch(() => {});
+  return promise;
 }
 
 // Read state from IndexedDB
@@ -266,7 +318,15 @@ async function getDBState() {
       };
       
       request.onerror = () => {
-        reject(request.error);
+        reject(request.error || new Error("Failed to get state"));
+      };
+
+      transaction.onerror = (e) => {
+        reject(transaction.error || e.target.error || new Error("Transaction error"));
+      };
+
+      transaction.onabort = () => {
+        reject(new Error("Transaction aborted"));
       };
     });
   } catch (err) {
@@ -289,7 +349,15 @@ async function saveDBState(state) {
       };
       
       request.onerror = () => {
-        reject(request.error);
+        reject(request.error || new Error("Failed to put state"));
+      };
+
+      transaction.onerror = (e) => {
+        reject(transaction.error || e.target.error || new Error("Transaction error"));
+      };
+
+      transaction.onabort = () => {
+        reject(new Error("Transaction aborted"));
       };
     });
   } catch (err) {
@@ -299,9 +367,9 @@ async function saveDBState(state) {
 }
 
 // BroadcastChannel for cross-tab synchronization
-const syncChannel = (typeof window !== 'undefined' && 'BroadcastChannel' in window) ? new BroadcastChannel('aether_state_sync') : null;
+export const syncChannel = (typeof window !== 'undefined' && 'BroadcastChannel' in window) ? new BroadcastChannel('aether_state_sync') : null;
 
-// Read the complete storage state with LocalStorage fallback & migration
+// Read the complete storage state with LocalStorage fallback & migration & InMemory backup
 export async function getStorageState() {
   if (!useLocalStorageFallback) {
     try {
@@ -348,7 +416,7 @@ export async function getStorageState() {
     }
   }
 
-  // LocalStorage Fallback Code
+  // LocalStorage / InMemory Fallback Code
   console.log("Running storage reader in LocalStorage fallback mode.");
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -359,33 +427,25 @@ export async function getStorageState() {
       }
     }
   } catch (err) {
-    console.error("Failed to read state from LocalStorage fallback", err);
+    console.warn("Failed to read state from LocalStorage fallback, using InMemoryCache:", err);
+    if (inMemoryCache.state) {
+      return inMemoryCache.state;
+    }
   }
   const fallback = { routines: [], completions: {} };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(fallback));
   } catch (err) {
-    console.error("Failed to initialize LocalStorage fallback", err);
+    console.warn("Failed to initialize LocalStorage fallback, cached in memory:", err);
+    inMemoryCache.state = fallback;
   }
-  return fallback;
+  return inMemoryCache.state || fallback;
 }
 
-// Write the complete storage state
-export async function saveStorageState(state) {
+// Inner helper to perform state saving to IDB
+async function performSaveStorageState(state) {
   if (useLocalStorageFallback) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('storage-update'));
-      }
-      if (syncChannel) {
-        syncChannel.postMessage({ type: 'STATE_UPDATED' });
-      }
-      return true;
-    } catch (error) {
-      console.error('Failed to save state to LocalStorage fallback', error);
-      return false;
-    }
+    return saveFallbackStorageState(state);
   }
 
   try {
@@ -406,20 +466,40 @@ export async function saveStorageState(state) {
   } catch (error) {
     console.error('Failed to save state to IndexedDB, switching to LocalStorage fallback', error);
     useLocalStorageFallback = true;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('storage-update'));
-      }
-      if (syncChannel) {
-        syncChannel.postMessage({ type: 'STATE_UPDATED' });
-      }
-      return true;
-    } catch (fallbackErr) {
-      console.error('Failed to save state to LocalStorage fallback', fallbackErr);
-      return false;
-    }
+    return saveFallbackStorageState(state);
   }
+}
+
+// Fallback writer helper for LocalStorage -> InMemory Cache for State
+function saveFallbackStorageState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('storage-update'));
+    }
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'STATE_UPDATED' });
+    }
+    return true;
+  } catch (fallbackErr) {
+    console.warn('Failed to save state to LocalStorage fallback, caching in memory', fallbackErr);
+    inMemoryCache.state = state;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('storage-update'));
+    }
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'STATE_UPDATED' });
+    }
+    return true;
+  }
+}
+
+// Write the complete storage state (Serialized sequence)
+export async function saveStorageState(state) {
+  // Coalesce state write requests to serialize execution
+  const promise = stateWriteChain.then(() => performSaveStorageState(state));
+  stateWriteChain = promise.then(() => {}).catch(() => {});
+  return promise;
 }
 
 // Reset store to factory settings
@@ -468,18 +548,50 @@ export async function importStateFromString(jsonString) {
     
     // Deep validate routines
     const validatedRoutines = parsed.routines.map((rt, idx) => {
-      if (!rt.name || typeof rt.name !== 'string') throw new Error(`Routine at index ${idx} is missing a name`);
+      if (!rt || typeof rt !== 'object' || Array.isArray(rt)) {
+        throw new Error(`Routine at index ${idx} is not a valid object`);
+      }
+      if (!rt.name || typeof rt.name !== 'string') {
+        throw new Error(`Routine at index ${idx} is missing a name`);
+      }
+      
+      // Fix NaN/undefined/null and coercion issues for numbers
+      const parsedEnergy = Number(rt.energy);
+      const energy = (!isNaN(parsedEnergy) && rt.energy !== null && rt.energy !== undefined) 
+        ? Math.max(1, Math.min(5, Math.floor(parsedEnergy))) 
+        : 3;
+
+      const parsedPriority = Number(rt.priority);
+      const priority = (!isNaN(parsedPriority) && rt.priority !== null && rt.priority !== undefined) 
+        ? Math.max(1, Math.min(5, Math.floor(parsedPriority))) 
+        : 3;
+
+      const parsedDuration = Number(rt.duration);
+      const duration = (!isNaN(parsedDuration) && rt.duration !== null && rt.duration !== undefined) 
+        ? Math.max(5, Math.min(1440, Math.floor(parsedDuration))) 
+        : 30;
+
+      // Fix midnight (hour 0) coercion bug where Number(rt.targetHour) || 9 turns 0 into 9
+      const parsedTargetHour = Number(rt.targetHour);
+      const targetHour = (!isNaN(parsedTargetHour) && rt.targetHour !== null && rt.targetHour !== undefined)
+        ? Math.max(0, Math.min(23, Math.floor(parsedTargetHour)))
+        : 9;
+      
+      // Fix string day checks to prevent data type corruption (e.g. String ["1"] kept in array instead of Integer [1])
+      const days = Array.isArray(rt.days) 
+        ? rt.days.map(Number).filter(d => !isNaN(d) && Number.isInteger(d) && d >= 0 && d <= 6) 
+        : [1, 2, 3, 4, 5];
       
       return {
         id: rt.id || `rt_${Math.random().toString(36).substr(2, 9)}`,
-        name: rt.name,
+        name: rt.name.trim(),
         category: rt.category || 'General',
-        energy: Math.max(1, Math.min(5, Number(rt.energy) || 3)),
+        energy,
         preferredBlock: ['morning', 'afternoon', 'evening', 'night'].includes(rt.preferredBlock) ? rt.preferredBlock : 'morning',
-        targetHour: Math.max(0, Math.min(23, Number(rt.targetHour) || 9)),
-        days: Array.isArray(rt.days) ? rt.days.filter(d => d >= 0 && d <= 6) : [1, 2, 3, 4, 5],
-        duration: Math.max(5, Math.min(1440, Number(rt.duration) || 30)),
-        priority: Math.max(1, Math.min(5, Number(rt.priority) || 3)),
+        targetHour,
+        days,
+        duration,
+        priority,
         conflictGroup: rt.conflictGroup || ''
       };
     });

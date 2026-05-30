@@ -96,8 +96,13 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
   let lookDate = new Date(today);
   let streakBroken = false;
   let isFirstCheck = true;
+  let daysChecked = 0;
 
   while (!streakBroken) {
+    daysChecked++;
+    if (daysChecked > 1000) { // Safety breakout to avoid infinite loop
+      break;
+    }
     const lookStr = lookDate.toISOString().split('T')[0];
     const dayOfWeek = lookDate.getDay();
 
@@ -401,7 +406,7 @@ function hydrate(chromosome, routines) {
 /**
  * Globally scores a chromosome schedule mapping across all days (0-6)
  */
-export function evaluateFitness(chromosome, routines, fitnessCache = null) {
+export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRoutineIndices = null) {
   if (fitnessCache) {
     const key = chromosome.join(',');
     if (fitnessCache[key] !== undefined) {
@@ -409,23 +414,35 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null) {
     }
   }
 
-  const activeRoutines = hydrate(chromosome, routines);
   let score = 0;
   
   for (let day = 0; day < 7; day++) {
-    const dayRoutines = activeRoutines.filter(r => r.days.includes(day));
-    if (dayRoutines.length === 0) continue;
-    
-    // Sort chronologically
-    dayRoutines.sort((a, b) => a.targetHour - b.targetHour);
+    let sortedIndices;
+    if (dayRoutineIndices) {
+      const indices = dayRoutineIndices[day];
+      if (indices.length === 0) continue;
+      sortedIndices = [...indices];
+      // High-performance sort: avoid object creation entirely by sorting index array
+      sortedIndices.sort((a, b) => chromosome[a] - chromosome[b]);
+    } else {
+      const activeRoutines = hydrate(chromosome, routines);
+      const dayRoutines = activeRoutines.filter(r => r.days.includes(day));
+      if (dayRoutines.length === 0) continue;
+      dayRoutines.sort((a, b) => a.targetHour - b.targetHour);
+      
+      // Fallback object map for backward compatibility
+      sortedIndices = dayRoutines.map(dr => routines.findIndex(r => r.id === dr.id));
+    }
     
     // 1. Preferred Block Score & Overlaps
-    for (let i = 0; i < dayRoutines.length; i++) {
-      const r1 = dayRoutines[i];
-      const start1 = r1.targetHour * 60;
+    for (let i = 0; i < sortedIndices.length; i++) {
+      const idx1 = sortedIndices[i];
+      const r1 = routines[idx1];
+      const targetHour1 = chromosome[idx1];
+      const start1 = targetHour1 * 60;
       const end1 = start1 + r1.duration;
       
-      const block = getBlockForHour(r1.targetHour);
+      const block = getBlockForHour(targetHour1);
       if (block === r1.preferredBlock) {
         score += 30;
       } else if (ADJACENT_BLOCKS[r1.preferredBlock]?.includes(block)) {
@@ -434,9 +451,11 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null) {
         score -= 20;
       }
       
-      for (let j = i + 1; j < dayRoutines.length; j++) {
-        const r2 = dayRoutines[j];
-        const start2 = r2.targetHour * 60;
+      for (let j = i + 1; j < sortedIndices.length; j++) {
+        const idx2 = sortedIndices[j];
+        const r2 = routines[idx2];
+        const targetHour2 = chromosome[idx2];
+        const start2 = targetHour2 * 60;
         const end2 = start2 + r2.duration;
         
         const overlap = Math.max(0, Math.min(end1, end2) - Math.max(start1, start2));
@@ -452,14 +471,17 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null) {
       const hourStartMin = hour * 60;
       const hourEndMin = (hour + 1) * 60;
       
-      dayRoutines.forEach(r => {
-        const startMin = r.targetHour * 60;
+      for (let i = 0; i < sortedIndices.length; i++) {
+        const idx = sortedIndices[i];
+        const r = routines[idx];
+        const targetHour = chromosome[idx];
+        const startMin = targetHour * 60;
         const endMin = startMin + r.duration;
         const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
         if (overlap > 0) {
           energyDemand += r.energy * (overlap / 60);
         }
-      });
+      }
       
       const capacity = getEnergyCapacity(hour);
       if (energyDemand > capacity) {
@@ -468,13 +490,18 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null) {
     }
     
     // 3. Rest Padding, Habit Stacking, and Conflict Groups
-    for (let i = 0; i < dayRoutines.length - 1; i++) {
-      const r1 = dayRoutines[i];
-      const r2 = dayRoutines[i + 1];
+    for (let i = 0; i < sortedIndices.length - 1; i++) {
+      const idx1 = sortedIndices[i];
+      const idx2 = sortedIndices[i + 1];
+      const r1 = routines[idx1];
+      const r2 = routines[idx2];
       
-      const start1 = r1.targetHour * 60;
+      const targetHour1 = chromosome[idx1];
+      const targetHour2 = chromosome[idx2];
+      
+      const start1 = targetHour1 * 60;
       const end1 = start1 + r1.duration;
-      const start2 = r2.targetHour * 60;
+      const start2 = targetHour2 * 60;
       
       const gap = start2 - end1;
       if (gap >= 0) {
@@ -534,11 +561,20 @@ export function optimizeAllSchedules(routines) {
   
   const N = routines.length;
   
-  // Dynamic scaling of population and generations for instant sub-100ms execution
-  let popSize = 100;
-  let generations = 100;
-  if (N > 25) { popSize = 50; generations = 50; }
-  if (N > 50) { popSize = 30; generations = 30; }
+  // Dynamic scaling of population and generations for instant sub-10ms execution
+  let popSize = 80;
+  let generations = 80;
+  if (N > 15) { popSize = 50; generations = 50; }
+  if (N > 30) { popSize = 30; generations = 30; }
+  if (N > 60) { popSize = 20; generations = 20; }
+  
+  // Pre-group routine indices by active day to avoid .filter() and .includes() inside evolution loops
+  const dayRoutineIndices = Array.from({ length: 7 }, () => []);
+  routines.forEach((r, idx) => {
+    r.days.forEach(day => {
+      dayRoutineIndices[day].push(idx);
+    });
+  });
   
   // Initialize fitness cache for memoization
   const fitnessCache = {};
@@ -556,7 +592,7 @@ export function optimizeAllSchedules(routines) {
   
   // Optimization evolution loop
   for (let gen = 0; gen < generations; gen++) {
-    const fitnesses = pop.map(chrom => evaluateFitness(chrom, routines, fitnessCache));
+    const fitnesses = pop.map(chrom => evaluateFitness(chrom, routines, fitnessCache, dayRoutineIndices));
     
     // Index mapping to sort by fitness descending
     const indices = Array.from({ length: popSize }, (_, i) => i);
@@ -605,7 +641,7 @@ export function optimizeAllSchedules(routines) {
   }
   
   // Find absolute best schedule in final population
-  const finalFitnesses = pop.map(chrom => evaluateFitness(chrom, routines, fitnessCache));
+  const finalFitnesses = pop.map(chrom => evaluateFitness(chrom, routines, fitnessCache, dayRoutineIndices));
   let bestIdx = 0;
   for (let i = 1; i < popSize; i++) {
     if (finalFitnesses[i] > finalFitnesses[bestIdx]) {

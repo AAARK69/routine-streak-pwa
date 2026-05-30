@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    // Force trailing slash on GitHub Pages to prevent relative resource 404s
+    if (window.location.pathname === '/routine-streak-pwa') {
+      window.location.replace(window.location.origin + window.location.pathname + '/' + window.location.search + window.location.hash);
+    }
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Aether // local Routine & Streak Grid</title>

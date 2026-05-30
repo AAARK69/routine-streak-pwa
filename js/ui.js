@@ -8,7 +8,7 @@ export const CATEGORY_COLORS = {
   Academics: '#00f0ff', // Neon Cyan
   Health: '#00ff88',    // Neon Green
   Work: '#ff9500',      // Neon Orange
-  Leisure: '#ff2d55'    // Neon Pink
+  Leisure: '#ff6b8b'    // Neon Pink (Satisfies WCAG AAA >7:1)
 };
 
 /**
@@ -21,12 +21,16 @@ function formatHour(hour) {
 /**
  * Render chronological card timeline for a specific day (0-6)
  */
-export function renderTimeline(day, state, onToggleComplete, onEditClick) {
+export function renderTimeline(day, state, onToggleComplete, onEditClick, activeCategoryFilter = 'All') {
   const container = document.getElementById('timeline-list');
   container.innerHTML = '';
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const activeRoutines = state.routines.filter(r => r.days.includes(day));
+  let activeRoutines = state.routines.filter(r => r.days.includes(day));
+  
+  if (activeCategoryFilter && activeCategoryFilter !== 'All') {
+    activeRoutines = activeRoutines.filter(r => r.category === activeCategoryFilter);
+  }
   
   // Sort chronologically
   activeRoutines.sort((a, b) => a.targetHour - b.targetHour);
@@ -42,9 +46,28 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick) {
     return;
   }
 
-  activeRoutines.forEach(rt => {
+  activeRoutines.forEach((rt, index) => {
     const isCompleted = (state.completions[todayStr] || []).includes(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+
+    // 3. Habit-Stacking Connectors Check
+    if (index > 0) {
+      const prevRt = activeRoutines[index - 1];
+      const prevEndMin = (prevRt.targetHour * 60) + prevRt.duration;
+      const currStartMin = rt.targetHour * 60;
+      const gapMin = currStartMin - prevEndMin;
+
+      if (gapMin >= 0 && gapMin <= 45) {
+        const connector = document.createElement('div');
+        connector.className = 'habit-stack-connector';
+        connector.innerHTML = `
+          <div class="connector-line"></div>
+          <span class="connector-badge" role="status" aria-label="Habit stacking connector: ${gapMin} minutes gap between ${prevRt.name} and ${rt.name}">✨ STACKED ✨ (${gapMin} min gap)</span>
+          <div class="connector-line"></div>
+        `;
+        container.appendChild(connector);
+      }
+    }
 
     const card = document.createElement('div');
     card.className = `routine-card ${isCompleted ? 'completed' : ''}`;

@@ -1,7 +1,7 @@
 /**
  * Main Application Orchestrator
  */
-import { getStorageState, saveStorageState, exportStateToFile, importStateFromString, resetStateToMock, clearAllState } from './storage.js';
+import { getStorageState, saveStorageState, exportStateToFile, importStateFromString, resetStateToMock, clearAllState, getDailyNote, saveDailyNote } from './storage.js';
 import { optimizeAllSchedules } from './scheduler.js';
 import { renderTimeline, renderMatrix, renderStreaks, renderTopBarStats, renderYearGrid } from './ui.js';
 import { playClick, playChime, playSweep, toggleMute, isMuted } from './audio.js';
@@ -11,6 +11,7 @@ let state = { routines: [], completions: {} };
 let selectedDay = new Date().getDay(); // Default to today's day of week
 let currentTab = 'view-calendar';
 let lastActiveElement = null; // WCAG AAA Keyboard Focus Return tracking
+let activeCategoryFilter = 'All'; // Default active category filter
 
 /**
  * Initialize application and bind events
@@ -34,12 +35,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Set up BroadcastChannel listener for cross-tab synchronization
   if ('BroadcastChannel' in window) {
     const syncChannel = new BroadcastChannel('aether_state_sync');
-    syncChannel.onmessage = async (event) => {
-      if (event.data && event.data.type === 'STATE_UPDATED') {
-        console.log('[App Sync] State updated in another tab. Reloading and rendering...');
-        state = await getStorageState();
-        refreshAllUI();
+    let syncDebounceTimeout = null;
+    syncChannel.onmessage = (event) => {
+      if (syncDebounceTimeout) {
+        clearTimeout(syncDebounceTimeout);
       }
+      syncDebounceTimeout = setTimeout(async () => {
+        if (event.data && event.data.type === 'STATE_UPDATED') {
+          console.log('[App Sync] State updated in another tab. Reloading and rendering...');
+          state = await getStorageState();
+          refreshAllUI();
+        } else if (event.data && event.data.type === 'NOTE_UPDATED') {
+          const currentDateStr = getSelectedDateString();
+          if (event.data.date === currentDateStr) {
+            console.log('[App Sync] Daily note updated in another tab. Reloading note...');
+            loadCurrentDailyNote();
+          }
+        }
+      }, 150);
     };
   }
 
@@ -48,6 +61,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize Web Speech dictation system
   initVoiceDictation();
+
+  // Initialize Keyboard Keybindings
+  initKeyboardKeybindings();
+
+  // Initialize Daily Notes
+  initDailyNotes();
 
   // Run initial renders
   refreshAllUI();
@@ -75,7 +94,9 @@ function refreshAllUI() {
   
   // Render active panels based on navigation selection
   if (currentTab === 'view-timeline') {
-    renderTimeline(selectedDay, state, handleToggleCompletion, handleOpenEditModal);
+    renderCategoryFilterBar();
+    renderTimeline(selectedDay, state, handleToggleCompletion, handleOpenEditModal, activeCategoryFilter);
+    loadCurrentDailyNote();
   } else if (currentTab === 'view-matrix') {
     renderMatrix(selectedDay, state, handleOpenEditModal);
   } else if (currentTab === 'view-streaks') {
@@ -89,9 +110,13 @@ function refreshAllUI() {
   const todayStr = new Date().toISOString().split('T')[0];
   
   if (isAllClearToday && celebrationShown !== todayStr) {
+    lastActiveElement = document.activeElement;
     document.getElementById('confetti-screen').classList.add('active');
     localStorage.setItem('aether_today_celebration_clear', todayStr);
     playSweep(); // Immersive milestone sweep celebration
+    setTimeout(() => {
+      document.getElementById('btn-dismiss-celebration').focus();
+    }, 100);
   }
 }
 
@@ -158,6 +183,15 @@ function initAppNavigation() {
   document.getElementById('btn-dismiss-celebration').addEventListener('click', () => {
     playClick();
     document.getElementById('confetti-screen').classList.remove('active');
+    if (lastActiveElement) {
+      lastActiveElement.focus();
+    }
+  });
+
+  // WCAG AAA Celebration Focus Trap
+  const confettiScreen = document.getElementById('confetti-screen');
+  confettiScreen.addEventListener('keydown', (e) => {
+    trapFocus(e, confettiScreen);
   });
 }
 
@@ -311,6 +345,11 @@ function initModalTriggers() {
       playClick();
       closeRoutineModal();
     }
+  });
+
+  // WCAG AAA Keyboard Focus Trap
+  modal.addEventListener('keydown', (e) => {
+    trapFocus(e, modal);
   });
 }
 
@@ -514,6 +553,12 @@ function initVoiceDictation() {
   const voiceOverlay = document.getElementById('voice-listening-overlay');
   const voiceStatus = document.getElementById('voice-listening-status');
   const cancelVoiceBtn = document.getElementById('btn-cancel-voice');
+
+  if (voiceOverlay) {
+    voiceOverlay.addEventListener('keydown', (e) => {
+      trapFocus(e, voiceOverlay);
+    });
+  }
 
   if (!SpeechRecognition) {
     if (globalVoiceBtn) globalVoiceBtn.style.display = 'none';
@@ -752,4 +797,237 @@ function parseAndApplyVoiceCommand(text) {
 
 function capitalizeWords(str) {
   return str.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+/**
+ * Render category filter pills dynamically
+ */
+function renderCategoryFilterBar() {
+  const bar = document.getElementById('category-filter-bar');
+  if (!bar) return;
+
+  const categories = ['All', 'Academics', 'Health', 'Work', 'Leisure'];
+  bar.innerHTML = '';
+
+  categories.forEach(cat => {
+    const pill = document.createElement('button');
+    pill.className = 'filter-pill';
+    pill.textContent = cat;
+    pill.setAttribute('data-category', cat);
+    pill.setAttribute('role', 'tab');
+    pill.setAttribute('aria-selected', cat === activeCategoryFilter ? 'true' : 'false');
+    pill.setAttribute('aria-label', cat === 'All' ? 'Show all categories' : `Filter routines by ${cat}`);
+    
+    const colors = {
+      All: '#ffb000',
+      Academics: '#00f0ff',
+      Health: '#00ff88',
+      Work: '#ff9500',
+      Leisure: '#ff6b8b' // Satisfies WCAG AAA >7:1
+    };
+    const glows = {
+      All: 'rgba(255, 176, 0, 0.25)',
+      Academics: 'rgba(0, 240, 255, 0.25)',
+      Health: 'rgba(0, 255, 136, 0.25)',
+      Work: 'rgba(255, 149, 0, 0.25)',
+      Leisure: 'rgba(255, 107, 139, 0.25)' // Satisfies WCAG AAA >7:1
+    };
+
+    if (cat === activeCategoryFilter) {
+      pill.classList.add('active');
+      pill.style.setProperty('--pill-color', colors[cat]);
+      pill.style.setProperty('--pill-glow', glows[cat]);
+    }
+
+    pill.addEventListener('click', () => {
+      activeCategoryFilter = cat;
+      playClick();
+      refreshAllUI();
+    });
+
+    bar.appendChild(pill);
+  });
+}
+
+/**
+ * Helper to transition between view tabs
+ */
+function transitionToTab(tabId) {
+  const tab = document.getElementById(tabId);
+  if (tab) {
+    tab.click();
+  }
+}
+
+/**
+ * WCAG AAA Focus Trap Helper
+ */
+function trapFocus(e, container) {
+  if (e.key !== 'Tab') return;
+  
+  const focusables = Array.from(container.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )).filter(el => {
+    if (el.hasAttribute('disabled') || el.disabled) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (el.closest('.hidden')) return false;
+    return el.offsetWidth > 0 || el.offsetHeight > 0;
+  });
+
+  if (focusables.length === 0) {
+    e.preventDefault();
+    return;
+  }
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+
+  if (e.shiftKey) {
+    if (document.activeElement === first) {
+      last.focus();
+      e.preventDefault();
+    }
+  } else {
+    if (document.activeElement === last) {
+      first.focus();
+      e.preventDefault();
+    }
+  }
+}
+
+/**
+ * Register global document keyboard listener for quick-nav triggers
+ */
+function initKeyboardKeybindings() {
+  document.addEventListener('keydown', (e) => {
+    const activeEl = document.activeElement;
+    const isInput = activeEl && (
+      activeEl.tagName === 'INPUT' || 
+      activeEl.tagName === 'TEXTAREA' || 
+      activeEl.tagName === 'SELECT' || 
+      activeEl.isContentEditable
+    );
+    
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('routine-modal');
+      if (modal && modal.classList.contains('active')) {
+        closeRoutineModal();
+        playClick();
+      }
+      const voiceOverlay = document.getElementById('voice-listening-overlay');
+      if (voiceOverlay && voiceOverlay.style.display !== 'none') {
+        const cancelVoiceBtn = document.getElementById('btn-cancel-voice');
+        if (cancelVoiceBtn) cancelVoiceBtn.click();
+      }
+      const confettiScreen = document.getElementById('confetti-screen');
+      if (confettiScreen && confettiScreen.classList.contains('active')) {
+        const dismissBtn = document.getElementById('btn-dismiss-celebration');
+        if (dismissBtn) dismissBtn.click();
+      }
+      return;
+    }
+
+    if (isInput) return;
+
+    const key = e.key.toUpperCase();
+    
+    if (key === '1' || key === 'T') {
+      e.preventDefault();
+      transitionToTab('tab-timeline');
+    } else if (key === '2' || key === 'M') {
+      e.preventDefault();
+      transitionToTab('tab-matrix');
+    } else if (key === '3' || key === 'S') {
+      e.preventDefault();
+      transitionToTab('tab-streaks');
+    } else if (key === '4' || key === 'C') {
+      e.preventDefault();
+      transitionToTab('tab-calendar');
+    } else if (key === '5' || key === 'D') {
+      e.preventDefault();
+      transitionToTab('tab-settings');
+    } else if (key === 'N') {
+      e.preventDefault();
+      handleOpenAddModal();
+      playClick();
+    } else if (key === 'V') {
+      e.preventDefault();
+      const voiceBtn = document.getElementById('btn-global-voice');
+      if (voiceBtn) {
+        voiceBtn.click();
+      }
+    }
+  });
+}
+
+/**
+ * Get selected date string for daily notes tracking
+ */
+function getSelectedDateString() {
+  const today = new Date();
+  const diff = selectedDay - today.getDay();
+  const targetDate = new Date(today);
+  targetDate.setDate(today.getDate() + diff);
+  return targetDate.toISOString().split('T')[0];
+}
+
+/**
+ * Load note text for currently selected day
+ */
+let debounceTimeout = null;
+
+async function loadCurrentDailyNote() {
+  const textarea = document.getElementById('daily-notes-textarea');
+  if (!textarea) return;
+
+  const dateStr = getSelectedDateString();
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  textarea.placeholder = `Journal energy levels, study notes, or completion insights for ${dayNames[selectedDay]} (${dateStr})...`;
+  
+  const badge = document.getElementById('notes-status-badge');
+  if (badge) {
+    badge.className = 'notes-status-badge';
+    badge.textContent = '';
+  }
+
+  const noteText = await getDailyNote(dateStr);
+  textarea.value = noteText || "";
+}
+
+/**
+ * Initialize auto-saving daily notes listeners
+ */
+function initDailyNotes() {
+  const textarea = document.getElementById('daily-notes-textarea');
+  if (!textarea) return;
+
+  textarea.addEventListener('input', () => {
+    const badge = document.getElementById('notes-status-badge');
+    if (badge) {
+      badge.textContent = 'SAVING...';
+      badge.className = 'notes-status-badge saving';
+    }
+
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout);
+    }
+
+    debounceTimeout = setTimeout(async () => {
+      const dateStr = getSelectedDateString();
+      const text = textarea.value;
+      const success = await saveDailyNote(dateStr, text);
+
+      if (success && badge) {
+        badge.textContent = 'SYNCED // IDB';
+        badge.className = 'notes-status-badge synced';
+        setTimeout(() => {
+          if (badge.textContent === 'SYNCED // IDB') {
+            badge.className = 'notes-status-badge';
+            badge.textContent = '';
+          }
+        }, 2000);
+      }
+    }, 500);
+  });
 }

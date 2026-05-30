@@ -91,8 +91,18 @@
         <p class="view-subtitle" id="selected-day-label">Monday Routines</p>
       </div>
 
+      <div class="category-filter-bar" id="category-filter-bar" role="tablist" aria-label="Filter routines by category"></div>
       <div class="timeline-container" id="timeline-list">
         <!-- Chronological cards rendered dynamically -->
+      </div>
+
+      <!-- Daily Notes Journal Widget -->
+      <div class="daily-notes-widget">
+        <div class="notes-header">
+          <span class="notes-title" id="notes-title-label">DAILY JOURNAL</span>
+          <span id="notes-status-badge" class="notes-status-badge"></span>
+        </div>
+        <textarea id="daily-notes-textarea" aria-labelledby="notes-title-label" placeholder="Journal energy levels, study notes, or completion insights for this day..."></textarea>
       </div>
     </section>
 

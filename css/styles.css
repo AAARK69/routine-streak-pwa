@@ -7,7 +7,7 @@
   
   --text-white: #ffffff;
   --text-gray: #b5b5c4;
-  --text-dim: #808095;
+  --text-dim: #a3a3bd;
   
   /* Neon Accents (Satisfies high contrast ratings) */
   --neon-green: #00ff88;
@@ -16,8 +16,8 @@
   --neon-cyan: #00f0ff;
   --neon-cyan-glow: rgba(0, 240, 255, 0.25);
   
-  --neon-pink: #ff2d55;
-  --neon-pink-glow: rgba(255, 45, 85, 0.25);
+  --neon-pink: #ff6b8b;
+  --neon-pink-glow: rgba(255, 107, 139, 0.25);
   
   --neon-orange: #ff9500;
   --neon-orange-glow: rgba(255, 149, 0, 0.25);
@@ -46,7 +46,7 @@ body.theme-vaporwave {
   
   --text-white: #ffe0f5;
   --text-gray: #d49fd1;
-  --text-dim: #8b5b8d;
+  --text-dim: #c39bc7;
   
   --neon-green: #00ffcc;
   --neon-green-glow: rgba(0, 255, 204, 0.3);
@@ -80,7 +80,7 @@ body.theme-crt {
   
   --text-white: #ffb000; /* IBM Amber Phosphor */
   --text-gray: #d49200;
-  --text-dim: #7d5700;
+  --text-dim: #cf8f00;
   
   --neon-green: #ffa200;
   --neon-green-glow: rgba(255, 162, 0, 0.25);
@@ -140,7 +140,7 @@ body.theme-mono {
   
   --text-white: #ffffff;
   --text-gray: #bbbbbb;
-  --text-dim: #777777;
+  --text-dim: #9e9e9e;
   
   --neon-green: #ffffff;
   --neon-green-glow: rgba(255, 255, 255, 0);
@@ -2156,4 +2156,254 @@ body.theme-mono .glowing-progress-bar {
   .routine-card:hover {
     transform: scale(1.02) translateY(-2px);
   }
+}
+
+/* Category Filter Bar & Glassmorphic Interactive Pills */
+.category-filter-bar {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 8px 4px 16px 4px;
+  scrollbar-width: none;
+  background: transparent;
+  align-items: center;
+}
+.category-filter-bar::-webkit-scrollbar {
+  display: none;
+}
+.filter-pill {
+  background: rgba(25, 25, 35, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-gray);
+  padding: 8px 18px;
+  border-radius: 24px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  outline: none;
+}
+.filter-pill:hover, .filter-pill:focus-visible {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-white);
+}
+.filter-pill:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+}
+.filter-pill:active {
+  transform: translateY(1px);
+}
+
+/* Category Accent Dynamic Animations on Hover and Select */
+.filter-pill[data-category="All"]:hover,
+.filter-pill[data-category="All"].active {
+  color: #ffb000 !important;
+  border-color: #ffb000 !important;
+  background: rgba(255, 176, 0, 0.08) !important;
+  box-shadow: 0 0 14px rgba(255, 176, 0, 0.35) !important;
+}
+.filter-pill[data-category="Academics"]:hover,
+.filter-pill[data-category="Academics"].active {
+  color: var(--neon-cyan) !important;
+  border-color: var(--neon-cyan) !important;
+  background: rgba(0, 240, 255, 0.08) !important;
+  box-shadow: 0 0 14px var(--neon-cyan-glow) !important;
+}
+.filter-pill[data-category="Health"]:hover,
+.filter-pill[data-category="Health"].active {
+  color: var(--neon-green) !important;
+  border-color: var(--neon-green) !important;
+  background: rgba(0, 255, 136, 0.08) !important;
+  box-shadow: 0 0 14px var(--neon-green-glow) !important;
+}
+.filter-pill[data-category="Work"]:hover,
+.filter-pill[data-category="Work"].active {
+  color: var(--neon-orange) !important;
+  border-color: var(--neon-orange) !important;
+  background: rgba(255, 149, 0, 0.08) !important;
+  box-shadow: 0 0 14px var(--neon-orange-glow) !important;
+}
+.filter-pill[data-category="Leisure"]:hover,
+.filter-pill[data-category="Leisure"].active {
+  color: var(--neon-pink) !important;
+  border-color: var(--neon-pink) !important;
+  background: rgba(255, 45, 85, 0.08) !important;
+  box-shadow: 0 0 14px var(--neon-pink-glow) !important;
+}
+
+/* Glassmorphic Terminal Daily Notes Widget */
+.daily-notes-widget {
+  margin-top: 32px;
+  padding: 20px;
+  background: rgba(13, 13, 17, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 3px double rgba(0, 240, 255, 0.15);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  position: relative;
+}
+.daily-notes-widget:focus-within {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 20px var(--neon-cyan-glow), inset 0 0 10px rgba(0, 240, 255, 0.05);
+}
+.notes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+.notes-title {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--text-gray);
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.notes-title::before {
+  content: ">";
+  color: var(--neon-cyan);
+  font-weight: bold;
+  animation: terminal-blink 1s infinite steps(2);
+}
+
+@keyframes terminal-blink {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+#daily-notes-textarea {
+  width: 100%;
+  min-height: 130px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 14px;
+  color: #e0f8ff;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  caret-color: var(--neon-cyan);
+  transition: all 0.3s ease;
+}
+#daily-notes-textarea:focus {
+  border-color: rgba(0, 240, 255, 0.4);
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 12px rgba(0, 240, 255, 0.05);
+}
+
+/* Custom terminal scrollbars */
+#daily-notes-textarea::-webkit-scrollbar {
+  width: 6px;
+}
+#daily-notes-textarea::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+}
+#daily-notes-textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.25);
+  border-radius: 4px;
+}
+#daily-notes-textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--neon-cyan);
+}
+
+/* Glowing Notes Status Badges */
+.notes-status-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  opacity: 0;
+  text-transform: uppercase;
+}
+.notes-status-badge.saving {
+  opacity: 1;
+  color: var(--neon-orange);
+  background: rgba(255, 149, 0, 0.12);
+  border: 1px solid var(--neon-orange);
+  box-shadow: 0 0 10px var(--neon-orange-glow);
+  text-shadow: 0 0 5px var(--neon-orange-glow);
+}
+.notes-status-badge.synced {
+  opacity: 1;
+  color: var(--neon-green);
+  background: rgba(0, 255, 136, 0.12);
+  border: 1px solid var(--neon-green);
+  box-shadow: 0 0 10px var(--neon-green-glow);
+  text-shadow: 0 0 5px var(--neon-green-glow);
+  animation: flash-badge 1.5s infinite ease-in-out;
+}
+
+@keyframes flash-badge {
+  0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--neon-green-glow); }
+  50% { opacity: 0.6; box-shadow: 0 0 4px var(--neon-green-glow); }
+}
+
+/* Premium Habit-Stacking Connectors styling */
+.habit-stack-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: -6px 0; /* Tightens the layout between routine cards */
+  position: relative;
+  z-index: 5;
+}
+.connector-line {
+  width: 2px;
+  height: 12px;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 2px,
+    var(--neon-green) 2px,
+    var(--neon-green) 6px
+  );
+  box-shadow: 0 0 8px var(--neon-green-glow);
+  opacity: 0.85;
+}
+.connector-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--neon-green);
+  background: var(--bg-card);
+  border: 1px solid var(--neon-green);
+  border-radius: 12px;
+  padding: 4px 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: 0 0 10px var(--neon-green-glow), inset 0 0 4px var(--neon-green-glow);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.connector-badge:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 16px var(--neon-green), inset 0 0 8px var(--neon-green-glow);
+  color: var(--text-white);
+  background: rgba(0, 255, 136, 0.1);
 }

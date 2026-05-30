@@ -401,7 +401,14 @@ function hydrate(chromosome, routines) {
 /**
  * Globally scores a chromosome schedule mapping across all days (0-6)
  */
-export function evaluateFitness(chromosome, routines) {
+export function evaluateFitness(chromosome, routines, fitnessCache = null) {
+  if (fitnessCache) {
+    const key = chromosome.join(',');
+    if (fitnessCache[key] !== undefined) {
+      return fitnessCache[key];
+    }
+  }
+
   const activeRoutines = hydrate(chromosome, routines);
   let score = 0;
   
@@ -496,6 +503,11 @@ export function evaluateFitness(chromosome, routines) {
     }
   }
   
+  if (fitnessCache) {
+    const key = chromosome.join(',');
+    fitnessCache[key] = score;
+  }
+  
   return score;
 }
 
@@ -528,6 +540,9 @@ export function optimizeAllSchedules(routines) {
   if (N > 25) { popSize = 50; generations = 50; }
   if (N > 50) { popSize = 30; generations = 30; }
   
+  // Initialize fitness cache for memoization
+  const fitnessCache = {};
+  
   let pop = [];
   
   // Seed 1: The current configuration (ensures monotonic improvement, never degrades)
@@ -541,7 +556,7 @@ export function optimizeAllSchedules(routines) {
   
   // Optimization evolution loop
   for (let gen = 0; gen < generations; gen++) {
-    const fitnesses = pop.map(chrom => evaluateFitness(chrom, routines));
+    const fitnesses = pop.map(chrom => evaluateFitness(chrom, routines, fitnessCache));
     
     // Index mapping to sort by fitness descending
     const indices = Array.from({ length: popSize }, (_, i) => i);
@@ -590,7 +605,7 @@ export function optimizeAllSchedules(routines) {
   }
   
   // Find absolute best schedule in final population
-  const finalFitnesses = pop.map(chrom => evaluateFitness(chrom, routines));
+  const finalFitnesses = pop.map(chrom => evaluateFitness(chrom, routines, fitnessCache));
   let bestIdx = 0;
   for (let i = 1; i < popSize; i++) {
     if (finalFitnesses[i] > finalFitnesses[bestIdx]) {

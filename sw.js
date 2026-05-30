@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aether-cache-v9';
+const CACHE_NAME = 'aether-cache-v10';
 const ASSETS = [
   './',
   'index.html',
@@ -11,6 +11,11 @@ const ASSETS = [
   'manifest.json',
   'favicon.svg'
 ];
+
+// Create a Set of absolute asset URLs at startup for O(1) matching latency
+const ASSET_URLS = new Set(
+  ASSETS.map(asset => new URL(asset, self.location.href).href)
+);
 
 // Install Event - Pre-cache core shell
 self.addEventListener('install', (e) => {
@@ -42,6 +47,8 @@ self.addEventListener('activate', (e) => {
 
 // Fetch Event - Cache-first falling back to network
 self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET') return;
+
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -49,10 +56,13 @@ self.addEventListener('fetch', (e) => {
       }
       return fetch(e.request).then((networkResponse) => {
         // Cache dynamic assets if they are successful
+        const requestUrl = e.request.url.split('?')[0];
+        const isAppAsset = ASSET_URLS.has(requestUrl);
+        const isFont = e.request.url.includes('fonts.googleapis.com') || e.request.url.includes('fonts.gstatic.com');
+
         if (
           networkResponse.status === 200 &&
-          networkResponse.type === 'basic' &&
-          ASSETS.some(asset => e.request.url.includes(asset))
+          (isAppAsset || isFont)
         ) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -62,7 +72,10 @@ self.addEventListener('fetch', (e) => {
         return networkResponse;
       });
     }).catch(() => {
-      // Offline fallback can be added here if needed
+      // Graceful offline fallback: if navigation fails, return app shell index.html
+      if (e.request.mode === 'navigate') {
+        return caches.match('./') || caches.match('index.html');
+      }
     })
   );
 });

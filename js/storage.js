@@ -120,34 +120,136 @@ function generateMockCompletions() {
 // IndexedDB Configuration
 const DB_NAME = 'AetherRoutinesDB';
 const STORE_NAME = 'app_state';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
+let useLocalStorageFallback = false;
 
 function getDB() {
   if (dbPromise) return dbPromise;
   
   dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
+    try {
+      if (typeof indexedDB === 'undefined' || !indexedDB) {
+        throw new Error("IndexedDB is not supported or defined in this environment");
       }
-    };
-    
-    request.onsuccess = (event) => {
-      resolve(event.target.result);
-    };
-    
-    request.onerror = (event) => {
-      console.error("IndexedDB open error:", event.target.error);
-      reject(event.target.error);
-    };
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME);
+        }
+        if (!db.objectStoreNames.contains('notes')) {
+          db.createObjectStore('notes', { keyPath: 'date' });
+        }
+      };
+      
+      request.onsuccess = (event) => {
+        resolve(event.target.result);
+      };
+      
+      request.onerror = (event) => {
+        console.error("IndexedDB open error:", event.target.error);
+        useLocalStorageFallback = true;
+        reject(event.target.error);
+      };
+    } catch (e) {
+      console.error("IndexedDB open exception:", e);
+      useLocalStorageFallback = true;
+      reject(e);
+    }
   });
   
   return dbPromise;
+}
+
+// Read a daily note from the notes store
+export async function getDailyNote(dateStr) {
+  if (useLocalStorageFallback) {
+    try {
+      return localStorage.getItem(`aether_pwa_note_${dateStr}`) || "";
+    } catch (err) {
+      console.error("Error reading daily note from LocalStorage fallback", err);
+      return "";
+    }
+  }
+
+  try {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction('notes', 'readonly');
+      const store = transaction.objectStore('notes');
+      const request = store.get(dateStr);
+      
+      request.onsuccess = () => {
+        if (request.result) {
+          resolve(request.result.text || "");
+        } else {
+          resolve("");
+        }
+      };
+      
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } catch (err) {
+    console.error("Error reading daily note from IndexedDB, switching to LocalStorage", err);
+    useLocalStorageFallback = true;
+    return localStorage.getItem(`aether_pwa_note_${dateStr}`) || "";
+  }
+}
+
+// Save a daily note to the notes store and notify other tabs
+export async function saveDailyNote(dateStr, noteText) {
+  if (useLocalStorageFallback) {
+    try {
+      localStorage.setItem(`aether_pwa_note_${dateStr}`, noteText);
+      if (syncChannel) {
+        syncChannel.postMessage({ type: 'NOTE_UPDATED', date: dateStr });
+      }
+      return true;
+    } catch (err) {
+      console.error("Error saving daily note to LocalStorage", err);
+      return false;
+    }
+  }
+
+  try {
+    const db = await getDB();
+    const success = await new Promise((resolve, reject) => {
+      const transaction = db.transaction('notes', 'readwrite');
+      const store = transaction.objectStore('notes');
+      const request = store.put({ date: dateStr, text: noteText });
+      
+      request.onsuccess = () => {
+        resolve(true);
+      };
+      
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+
+    if (success && syncChannel) {
+      syncChannel.postMessage({ type: 'NOTE_UPDATED', date: dateStr });
+    }
+    return success;
+  } catch (err) {
+    console.error("Error saving daily note to IndexedDB, switching to LocalStorage", err);
+    useLocalStorageFallback = true;
+    try {
+      localStorage.setItem(`aether_pwa_note_${dateStr}`, noteText);
+      if (syncChannel) {
+        syncChannel.postMessage({ type: 'NOTE_UPDATED', date: dateStr });
+      }
+      return true;
+    } catch (fallbackErr) {
+      console.error("Error saving daily note to LocalStorage fallback", fallbackErr);
+      return false;
+    }
+  }
 }
 
 // Read state from IndexedDB
@@ -201,54 +303,91 @@ const syncChannel = (typeof window !== 'undefined' && 'BroadcastChannel' in wind
 
 // Read the complete storage state with LocalStorage fallback & migration
 export async function getStorageState() {
-  try {
-    // 1. Try to load from IndexedDB
-    let state = await getDBState();
-    
-    if (state) {
-      // Basic schema check
-      if (!state.routines || !state.completions) {
-        throw new Error("Invalid IndexedDB state schema");
-      }
-      return state;
-    }
-    
-    // 2. If no state in IndexedDB, check LocalStorage for migration
-    console.log("No state in IndexedDB. Checking LocalStorage for migration...");
-    const rawLocalStorage = localStorage.getItem(STORAGE_KEY);
-    if (rawLocalStorage) {
-      try {
-        const parsed = JSON.parse(rawLocalStorage);
-        if (parsed && parsed.routines && parsed.completions) {
-          console.log("Migration: Found existing state in LocalStorage. Migrating to IndexedDB...");
-          await saveDBState(parsed);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new Event('storage-update'));
-          }
-          return parsed;
+  if (!useLocalStorageFallback) {
+    try {
+      // 1. Try to load from IndexedDB
+      let state = await getDBState();
+      
+      if (state) {
+        // Basic schema check
+        if (!state.routines || !state.completions) {
+          throw new Error("Invalid IndexedDB state schema");
         }
-      } catch (err) {
-        console.error("Migration: Failed to parse LocalStorage data", err);
+        return state;
+      }
+      
+      // 2. If no state in IndexedDB, check LocalStorage for migration
+      console.log("No state in IndexedDB. Checking LocalStorage for migration...");
+      const rawLocalStorage = localStorage.getItem(STORAGE_KEY);
+      if (rawLocalStorage) {
+        try {
+          const parsed = JSON.parse(rawLocalStorage);
+          if (parsed && parsed.routines && parsed.completions) {
+            console.log("Migration: Found existing state in LocalStorage. Migrating to IndexedDB...");
+            await saveDBState(parsed);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('storage-update'));
+            }
+            return parsed;
+          }
+        } catch (err) {
+          console.error("Migration: Failed to parse LocalStorage data", err);
+        }
+      }
+      
+      // 3. First-time load: populate with clean, empty slate
+      const initialState = {
+        routines: [],
+        completions: {}
+      };
+      await saveDBState(initialState);
+      return initialState;
+    } catch (error) {
+      console.error('IndexedDB error during getStorageState. Switching to LocalStorage fallback.', error);
+      useLocalStorageFallback = true;
+    }
+  }
+
+  // LocalStorage Fallback Code
+  console.log("Running storage reader in LocalStorage fallback mode.");
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.routines && parsed.completions) {
+        return parsed;
       }
     }
-    
-    // 3. First-time load: populate with clean, empty slate
-    const initialState = {
-      routines: [],
-      completions: {}
-    };
-    await saveDBState(initialState);
-    return initialState;
-  } catch (error) {
-    console.error('Failed to read storage. Initializing fresh store.', error);
-    const fallback = { routines: [], completions: {} };
-    await saveDBState(fallback);
-    return fallback;
+  } catch (err) {
+    console.error("Failed to read state from LocalStorage fallback", err);
   }
+  const fallback = { routines: [], completions: {} };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(fallback));
+  } catch (err) {
+    console.error("Failed to initialize LocalStorage fallback", err);
+  }
+  return fallback;
 }
 
 // Write the complete storage state
 export async function saveStorageState(state) {
+  if (useLocalStorageFallback) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('storage-update'));
+      }
+      if (syncChannel) {
+        syncChannel.postMessage({ type: 'STATE_UPDATED' });
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to save state to LocalStorage fallback', error);
+      return false;
+    }
+  }
+
   try {
     const success = await saveDBState(state);
     if (success) {
@@ -261,11 +400,25 @@ export async function saveStorageState(state) {
       if (syncChannel) {
         syncChannel.postMessage({ type: 'STATE_UPDATED' });
       }
+      return true;
     }
-    return success;
-  } catch (error) {
-    console.error('Failed to save state to IndexedDB', error);
     return false;
+  } catch (error) {
+    console.error('Failed to save state to IndexedDB, switching to LocalStorage fallback', error);
+    useLocalStorageFallback = true;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('storage-update'));
+      }
+      if (syncChannel) {
+        syncChannel.postMessage({ type: 'STATE_UPDATED' });
+      }
+      return true;
+    } catch (fallbackErr) {
+      console.error('Failed to save state to LocalStorage fallback', fallbackErr);
+      return false;
+    }
   }
 }
 

@@ -869,7 +869,7 @@ p {
   background: rgba(5, 5, 8, 0.95);
   border-top: 1px solid #1a1a26;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding: 8px 10px calc(8px + var(--safe-bottom)) 10px;
   z-index: 100;
   backdrop-filter: blur(8px);

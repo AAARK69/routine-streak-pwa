@@ -112,12 +112,6 @@
         <p class="view-subtitle">Aether Streak-keeping Heatmap Grid</p>
       </div>
 
-      <!-- Streaks Toggle Tabs -->
-      <div class="streaks-toggle-container">
-        <button class="toggle-btn active" id="btn-toggle-heatmap">30-DAY SHIELD</button>
-        <button class="toggle-btn" id="btn-toggle-yeargrid">2026 ANNUAL GRID</button>
-      </div>
-
       <!-- Grid and stats -->
       <div class="streak-analytics-dashboard">
         <div class="streak-card-stat">
@@ -134,42 +128,40 @@
         </div>
       </div>
 
-      <!-- SUBVIEW A: 30-Day Heatmap View -->
-      <div id="streaks-heatmap-view" class="streaks-subview active">
-        <div class="heatmap-container-card">
-          <h3 class="card-title">Activity Grid (Past 30 Days)</h3>
-          <div class="heatmap-grid-scroll">
-            <div class="heatmap-grid" id="streak-heatmap-grid">
-              <!-- 30 boxes generated dynamically -->
-            </div>
-          </div>
-          <div class="heatmap-legend">
-            <span>Less Active</span>
-            <div class="legend-cell color-0"></div>
-            <div class="legend-cell color-1"></div>
-            <div class="legend-cell color-2"></div>
-            <div class="legend-cell color-3"></div>
-            <span>Fully Active</span>
+      <div class="heatmap-container-card">
+        <h3 class="card-title">Activity Grid (Past 30 Days)</h3>
+        <div class="heatmap-grid-scroll">
+          <div class="heatmap-grid" id="streak-heatmap-grid">
+            <!-- 30 boxes generated dynamically -->
           </div>
         </div>
-
-        <!-- Individual routine heatmaps list -->
-        <div class="routine-streaks-list" id="routine-streaks-container">
-          <!-- Dynamic streak breakdowns -->
+        <div class="heatmap-legend">
+          <span>Less Active</span>
+          <div class="legend-cell color-0"></div>
+          <div class="legend-cell color-1"></div>
+          <div class="legend-cell color-2"></div>
+          <div class="legend-cell color-3"></div>
+          <span>Fully Active</span>
         </div>
       </div>
 
-      <!-- SUBVIEW B: 12-Month Yearly Calendar Grid View -->
-      <div id="streaks-yeargrid-view" class="streaks-subview">
-        <div class="heatmap-container-card" style="padding: 12px;">
-          <h3 class="card-title" id="annual-goal-title" style="margin-bottom: 4px;">2026 Tracking</h3>
-          <p class="view-subtitle" id="annual-goal-subtitle" style="margin-bottom: 16px; font-size:0.75rem; color:var(--text-gray);">
-            Annual Goal Progress: 0 Blue Days
-          </p>
-          
-          <div class="year-grid-layout" id="year-calendar-grid">
-            <!-- 12 Month cards generated dynamically -->
-          </div>
+      <!-- Individual routine heatmaps list -->
+      <div class="routine-streaks-list" id="routine-streaks-container">
+        <!-- Dynamic streak breakdowns -->
+      </div>
+    </section>
+
+    <!-- TAB 4: YEARLY CALENDAR GRID -->
+    <section id="view-calendar" class="view-panel">
+      <div class="view-header">
+        <h2>Annual Habit Grid</h2>
+        <p class="view-subtitle" id="annual-goal-subtitle">Annual Goal Progress: 0 Completed Blue Days</p>
+      </div>
+
+      <div class="heatmap-container-card" style="padding: 12px;">
+        <h3 class="card-title" id="annual-goal-title" style="margin-bottom: 12px;">2026 Tracking</h3>
+        <div class="year-grid-layout" id="year-calendar-grid">
+          <!-- 12 Month cards generated dynamically -->
         </div>
       </div>
     </section>
@@ -231,6 +223,10 @@
     <button class="nav-tab" data-target="view-streaks" id="tab-streaks">
       <span class="tab-icon">🔥</span>
       <span class="tab-label">Streaks</span>
+    </button>
+    <button class="nav-tab" data-target="view-calendar" id="tab-calendar">
+      <span class="tab-icon">🗓️</span>
+      <span class="tab-label">Calendar</span>
     </button>
     <button class="nav-tab" data-target="view-settings" id="tab-settings">
       <span class="tab-icon">💾</span>

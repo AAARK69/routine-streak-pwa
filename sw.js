@@ -1,9 +1,10 @@
-const CACHE_NAME = 'aether-cache-v4';
+const CACHE_NAME = 'aether-cache-v6';
 const ASSETS = [
   './',
   'index.html',
   'css/styles.css',
   'js/app.js',
+  'js/audio.js',
   'js/storage.js',
   'js/scheduler.js',
   'js/ui.js',

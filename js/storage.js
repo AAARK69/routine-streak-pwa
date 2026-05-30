@@ -116,68 +116,181 @@ function generateMockCompletions() {
   return completions;
 }
 
-// Read the complete storage state
-export function getStorageState() {
+// Read the complete storage state with LocalStorage fallback & migration
+// IndexedDB Configuration
+const DB_NAME = 'AetherRoutinesDB';
+const STORE_NAME = 'app_state';
+const DB_VERSION = 1;
+
+let dbPromise = null;
+
+function getDB() {
+  if (dbPromise) return dbPromise;
+  
+  dbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    
+    request.onsuccess = (event) => {
+      resolve(event.target.result);
+    };
+    
+    request.onerror = (event) => {
+      console.error("IndexedDB open error:", event.target.error);
+      reject(event.target.error);
+    };
+  });
+  
+  return dbPromise;
+}
+
+// Read state from IndexedDB
+async function getDBState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      // First-time load: populate with clean, empty slate for full customizability
-      const initialState = {
-        routines: [],
-        completions: {}
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get('state');
+      
+      request.onsuccess = () => {
+        resolve(request.result || null);
       };
-      saveStorageState(initialState);
-      return initialState;
+      
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } catch (err) {
+    console.error("Error reading from IndexedDB", err);
+    return null;
+  }
+}
+
+// Write state to IndexedDB
+async function saveDBState(state) {
+  try {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.put(state, 'state');
+      
+      request.onsuccess = () => {
+        resolve(true);
+      };
+      
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } catch (err) {
+    console.error("Error writing to IndexedDB", err);
+    return false;
+  }
+}
+
+// BroadcastChannel for cross-tab synchronization
+const syncChannel = (typeof window !== 'undefined' && 'BroadcastChannel' in window) ? new BroadcastChannel('aether_state_sync') : null;
+
+// Read the complete storage state with LocalStorage fallback & migration
+export async function getStorageState() {
+  try {
+    // 1. Try to load from IndexedDB
+    let state = await getDBState();
+    
+    if (state) {
+      // Basic schema check
+      if (!state.routines || !state.completions) {
+        throw new Error("Invalid IndexedDB state schema");
+      }
+      return state;
     }
-    const state = JSON.parse(raw);
-    // basic schema check
-    if (!state.routines || !state.completions) {
-      throw new Error("Invalid state schema");
+    
+    // 2. If no state in IndexedDB, check LocalStorage for migration
+    console.log("No state in IndexedDB. Checking LocalStorage for migration...");
+    const rawLocalStorage = localStorage.getItem(STORAGE_KEY);
+    if (rawLocalStorage) {
+      try {
+        const parsed = JSON.parse(rawLocalStorage);
+        if (parsed && parsed.routines && parsed.completions) {
+          console.log("Migration: Found existing state in LocalStorage. Migrating to IndexedDB...");
+          await saveDBState(parsed);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('storage-update'));
+          }
+          return parsed;
+        }
+      } catch (err) {
+        console.error("Migration: Failed to parse LocalStorage data", err);
+      }
     }
-    return state;
+    
+    // 3. First-time load: populate with clean, empty slate
+    const initialState = {
+      routines: [],
+      completions: {}
+    };
+    await saveDBState(initialState);
+    return initialState;
   } catch (error) {
-    console.error('Failed to read LocalStorage. Initializing fresh store.', error);
+    console.error('Failed to read storage. Initializing fresh store.', error);
     const fallback = { routines: [], completions: {} };
-    saveStorageState(fallback);
+    await saveDBState(fallback);
     return fallback;
   }
 }
 
 // Write the complete storage state
-export function saveStorageState(state) {
+export async function saveStorageState(state) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    // Trigger storage event for cross-tab synchronization
-    window.dispatchEvent(new Event('storage-update'));
-    return true;
+    const success = await saveDBState(state);
+    if (success) {
+      // Trigger local storage-update event for this window
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('storage-update'));
+      }
+      
+      // Notify other tabs via BroadcastChannel
+      if (syncChannel) {
+        syncChannel.postMessage({ type: 'STATE_UPDATED' });
+      }
+    }
+    return success;
   } catch (error) {
-    console.error('Failed to save state to LocalStorage', error);
+    console.error('Failed to save state to IndexedDB', error);
     return false;
   }
 }
 
 // Reset store to factory settings
-export function resetStateToMock() {
+export async function resetStateToMock() {
   const fresh = {
     routines: MOCK_ROUTINES,
     completions: generateMockCompletions()
   };
-  saveStorageState(fresh);
+  await saveStorageState(fresh);
   return fresh;
 }
 
-export function clearAllState() {
+export async function clearAllState() {
   const empty = {
     routines: [],
     completions: {}
   };
-  saveStorageState(empty);
+  await saveStorageState(empty);
   return empty;
 }
 
 // Export state as a downloadable JSON file
-export function exportStateToFile() {
-  const state = getStorageState();
+export async function exportStateToFile() {
+  const state = await getStorageState();
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   
@@ -190,8 +303,8 @@ export function exportStateToFile() {
   URL.revokeObjectURL(url);
 }
 
-// Import state from a JSON string with comprehensive validation
-export function importStateFromString(jsonString) {
+// Import state from a JSON string with comprehensive validation, auto-merging, and deduplication
+export async function importStateFromString(jsonString) {
   try {
     const parsed = JSON.parse(jsonString);
     
@@ -228,13 +341,82 @@ export function importStateFromString(jsonString) {
       });
     }
 
+    // --- AUTO-MERGING & DEDUPLICATING ---
+    const currentState = await getStorageState();
+    
+    const finalRoutines = [...currentState.routines];
+    const idTranslation = {}; // maps imported routine ID to existing/merged routine ID
+    
+    let addedCount = 0;
+    let mergedCount = 0;
+
+    validatedRoutines.forEach(importedRt => {
+      // 1. Try to find a routine with the exact same ID
+      let existingIndex = finalRoutines.findIndex(r => r.id === importedRt.id);
+      
+      // 2. If not found by ID, try to find a routine with the exact same name (case-insensitive)
+      if (existingIndex === -1) {
+        existingIndex = finalRoutines.findIndex(r => r.name.trim().toLowerCase() === importedRt.name.trim().toLowerCase());
+      }
+      
+      if (existingIndex > -1) {
+        // We have a match! Merge properties.
+        const existingRt = finalRoutines[existingIndex];
+        
+        // Save the translation mapping
+        idTranslation[importedRt.id] = existingRt.id;
+        
+        // Merge: take importedRt's values, but preserve existing ID
+        finalRoutines[existingIndex] = {
+          ...existingRt,
+          ...importedRt,
+          id: existingRt.id // keep the original ID to protect historical completion logs
+        };
+        mergedCount++;
+      } else {
+        // No match found: add new routine
+        finalRoutines.push(importedRt);
+        idTranslation[importedRt.id] = importedRt.id;
+        addedCount++;
+      }
+    });
+
+    // Merge completions
+    const finalCompletions = { ...currentState.completions };
+    let completionsCount = 0;
+
+    Object.keys(validatedCompletions).forEach(dateStr => {
+      // Map imported routine IDs to their translated IDs
+      const mappedImportedIds = validatedCompletions[dateStr].map(id => idTranslation[id] || id);
+      
+      if (!finalCompletions[dateStr]) {
+        finalCompletions[dateStr] = [];
+      }
+      
+      const beforeLength = finalCompletions[dateStr].length;
+      
+      // Merge lists and deduplicate using Set
+      finalCompletions[dateStr] = Array.from(new Set([
+        ...finalCompletions[dateStr],
+        ...mappedImportedIds
+      ]));
+      
+      const newCompletionsAdded = finalCompletions[dateStr].length - beforeLength;
+      completionsCount += newCompletionsAdded;
+    });
+
     const newState = {
-      routines: validatedRoutines,
-      completions: validatedCompletions
+      routines: finalRoutines,
+      completions: finalCompletions
     };
 
-    saveStorageState(newState);
-    return { success: true, count: validatedRoutines.length };
+    await saveStorageState(newState);
+    return { 
+      success: true, 
+      addedCount, 
+      mergedCount, 
+      completionsCount 
+    };
   } catch (error) {
     return { success: false, error: error.message };
   }

@@ -30,10 +30,17 @@
     <div class="logo-area">
       <span class="logo-glow"></span>
       <h1 id="app-title">Aether <span class="version-tag">v1.0</span></h1>
+      <div class="theme-header-pills">
+        <button class="theme-pill active" data-theme="default" title="Cyberpunk">⚡</button>
+        <button class="theme-pill" data-theme="vaporwave" title="Vaporwave">🌴</button>
+        <button class="theme-pill" data-theme="crt" title="Retro CRT">📟</button>
+        <button class="theme-pill" data-theme="mono" title="Monochrome">⚫</button>
+      </div>
     </div>
     
     <!-- Top Summary Banner -->
     <div class="global-tracker">
+      <button id="btn-audio-toggle" class="audio-toggle-btn" aria-label="Mute sound" title="Mute/Unmute Sounds">🔊</button>
       <div class="metric-chip" id="overall-streak-chip">
         <span class="metric-label">GLOBAL STREAK</span>
         <span class="metric-val" id="global-streak-count">0</span>
@@ -45,27 +52,34 @@
     </div>
   </header>
 
-  <!-- Progress Bar (Glowing Track) -->
+  <!-- Progress Bar (Glowing Track with Liquid Wave Animation) -->
   <div class="glowing-progress-container">
-    <div class="glowing-progress-bar" id="today-progress" style="width: 0%;"></div>
+    <div class="glowing-progress-bar" id="today-progress" style="width: 0%;">
+      <div class="liquid-wave-container">
+        <svg class="liquid-wave-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+          <path class="wave-layer wave-layer-back" d="M0,60 C150,100 350,20 500,60 C650,100 850,20 1000,60 C1150,100 1300,60 1400,60 L1400,120 L0,120 Z"></path>
+          <path class="wave-layer wave-layer-front" d="M0,60 C200,30 400,90 600,60 C800,30 1000,90 1200,60 L1200,120 L0,120 Z"></path>
+        </svg>
+      </div>
+    </div>
   </div>
 
   <!-- Day Selection Slider (for Matrix & Timeline focus) -->
-  <nav class="day-navigation">
-    <button class="day-btn" data-day="1" id="btn-day-mon">MON</button>
-    <button class="day-btn" data-day="2" id="btn-day-tue">TUE</button>
-    <button class="day-btn" data-day="3" id="btn-day-wed">WED</button>
-    <button class="day-btn" data-day="4" id="btn-day-thu">THU</button>
-    <button class="day-btn" data-day="5" id="btn-day-fri">FRI</button>
-    <button class="day-btn text-accent-pink" data-day="6" id="btn-day-sat">SAT</button>
-    <button class="day-btn text-accent-pink" data-day="0" id="btn-day-sun">SUN</button>
+  <nav class="day-navigation" role="tablist" aria-label="Day of week schedule filter">
+    <button class="day-btn" data-day="1" id="btn-day-mon" role="tab" aria-selected="false" aria-controls="view-timeline">MON</button>
+    <button class="day-btn" data-day="2" id="btn-day-tue" role="tab" aria-selected="false" aria-controls="view-timeline">TUE</button>
+    <button class="day-btn" data-day="3" id="btn-day-wed" role="tab" aria-selected="false" aria-controls="view-timeline">WED</button>
+    <button class="day-btn" data-day="4" id="btn-day-thu" role="tab" aria-selected="false" aria-controls="view-timeline">THU</button>
+    <button class="day-btn" data-day="5" id="btn-day-fri" role="tab" aria-selected="false" aria-controls="view-timeline">FRI</button>
+    <button class="day-btn text-accent-pink" data-day="6" id="btn-day-sat" role="tab" aria-selected="false" aria-controls="view-timeline">SAT</button>
+    <button class="day-btn text-accent-pink" data-day="0" id="btn-day-sun" role="tab" aria-selected="false" aria-controls="view-timeline">SUN</button>
   </nav>
 
   <!-- Main View Screens Container -->
   <main class="app-viewport">
     
     <!-- TAB 1: TIMELINE / TODAY VIEW -->
-    <section id="view-timeline" class="view-panel">
+    <section id="view-timeline" class="view-panel" role="tabpanel" aria-labelledby="tab-timeline">
       <div class="view-header">
         <h2>Schedule Timeline</h2>
         <p class="view-subtitle" id="selected-day-label">Monday Routines</p>
@@ -77,7 +91,7 @@
     </section>
 
     <!-- TAB 2: RULES MATRIX & OPTIMIZER -->
-    <section id="view-matrix" class="view-panel">
+    <section id="view-matrix" class="view-panel" role="tabpanel" aria-labelledby="tab-matrix">
       <div class="view-header flex-header">
         <div>
           <h2>Optimization Matrix</h2>
@@ -106,7 +120,7 @@
     </section>
 
     <!-- TAB 3: STREAK CALENDAR -->
-    <section id="view-streaks" class="view-panel">
+    <section id="view-streaks" class="view-panel" role="tabpanel" aria-labelledby="tab-streaks">
       <div class="view-header">
         <h2>Habit Streak Calendar</h2>
         <p class="view-subtitle">Aether Streak-keeping Heatmap Grid</p>
@@ -152,7 +166,7 @@
     </section>
 
     <!-- TAB 4: YEARLY CALENDAR GRID -->
-    <section id="view-calendar" class="view-panel active">
+    <section id="view-calendar" class="view-panel active" role="tabpanel" aria-labelledby="tab-calendar">
       <div class="view-header">
         <h2>Annual Habit Grid</h2>
         <p class="view-subtitle" id="annual-goal-subtitle">Annual Goal Progress: 0 Completed Blue Days</p>
@@ -167,13 +181,24 @@
     </section>
 
     <!-- TAB 4: SETTINGS / BACKUP -->
-    <section id="view-settings" class="view-panel">
+    <section id="view-settings" class="view-panel" role="tabpanel" aria-labelledby="tab-settings">
       <div class="view-header">
         <h2>Data Console</h2>
         <p class="view-subtitle">Local-First Storage Control & Validation</p>
       </div>
 
       <div class="settings-grid">
+        <div class="settings-card">
+          <h3 class="settings-card-title text-accent-cyan">Aesthetic Themes</h3>
+          <p class="settings-card-desc">Modify the global visual engine and typography layers of the Aether platform. Persisted locally.</p>
+          <div class="theme-selectors-grid">
+            <button class="btn-console theme-select-btn active" data-theme="default">CYBERPUNK DEFAULT</button>
+            <button class="btn-console theme-select-btn" data-theme="vaporwave">VAPORWAVE MAGENTA</button>
+            <button class="btn-console theme-select-btn" data-theme="crt">RETRO CRT AMBER</button>
+            <button class="btn-console theme-select-btn" data-theme="mono">MONOCHROME STARK</button>
+          </div>
+        </div>
+
         <div class="settings-card">
           <h3 class="settings-card-title text-accent-cyan">Export & Backup</h3>
           <p class="settings-card-desc">Download your entire schedule schema and completion history to a JSON file. Store backups securely.</p>
@@ -207,46 +232,52 @@
 
   </main>
 
+  <!-- Voice Dictation Floating Action Button -->
+  <button class="fab-btn voice-fab" id="btn-global-voice" aria-label="Add routine by voice command" style="bottom: calc(160px + var(--safe-bottom)); border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 15px var(--neon-pink-glow); font-size: 1.5rem;">🎤</button>
+
   <!-- Add Routine Floating Action Button -->
-  <button class="fab-btn" id="btn-open-add-modal" aria-label="Add Routine">+</button>
+  <button class="fab-btn" id="btn-open-add-modal" aria-label="Add Routine" aria-haspopup="dialog">+</button>
 
   <!-- Bottom Navigation Menu -->
-  <nav class="bottom-tabs-nav">
-    <button class="nav-tab active" data-target="view-calendar" id="tab-calendar">
+  <nav class="bottom-tabs-nav" role="tablist" aria-label="Main Navigation Panels">
+    <button class="nav-tab active" data-target="view-calendar" id="tab-calendar" role="tab" aria-selected="true" aria-controls="view-calendar">
       <span class="tab-icon">🗓️</span>
       <span class="tab-label">Calendar</span>
     </button>
-    <button class="nav-tab" data-target="view-timeline" id="tab-timeline">
+    <button class="nav-tab" data-target="view-timeline" id="tab-timeline" role="tab" aria-selected="false" aria-controls="view-timeline">
       <span class="tab-icon">⚡</span>
       <span class="tab-label">Timeline</span>
     </button>
-    <button class="nav-tab" data-target="view-matrix" id="tab-matrix">
+    <button class="nav-tab" data-target="view-matrix" id="tab-matrix" role="tab" aria-selected="false" aria-controls="view-matrix">
       <span class="tab-icon">📐</span>
       <span class="tab-label">Matrix</span>
     </button>
-    <button class="nav-tab" data-target="view-streaks" id="tab-streaks">
+    <button class="nav-tab" data-target="view-streaks" id="tab-streaks" role="tab" aria-selected="false" aria-controls="view-streaks">
       <span class="tab-icon">🔥</span>
       <span class="tab-label">Streaks</span>
     </button>
-    <button class="nav-tab" data-target="view-settings" id="tab-settings">
+    <button class="nav-tab" data-target="view-settings" id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings">
       <span class="tab-icon">💾</span>
       <span class="tab-label">Data</span>
     </button>
   </nav>
 
   <!-- ADD / EDIT ROUTINE MODAL -->
-  <div class="modal-overlay" id="routine-modal">
+  <div class="modal-overlay" id="routine-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="modal-title">Configure Routine</h3>
-        <button class="modal-close" id="btn-close-modal">&times;</button>
+        <button class="modal-close" id="btn-close-modal" aria-label="Close dialog">&times;</button>
       </div>
       <form id="routine-form" autocomplete="off">
         <input type="hidden" id="form-routine-id" value="">
         
         <div class="form-group">
           <label for="form-name">Routine Name</label>
-          <input type="text" id="form-name" required placeholder="e.g. Comp Sci 101 Lecture">
+          <div class="form-voice-input-wrapper">
+            <input type="text" id="form-name" required placeholder="e.g. Comp Sci 101 Lecture" style="flex-grow: 1;">
+            <button type="button" class="btn-voice-dictate" id="btn-voice-dictate" aria-label="Dictate routine name or details using voice" title="Dictate Routine Info">🎤</button>
+          </div>
         </div>
 
         <div class="form-row-2">
@@ -344,14 +375,22 @@
   </div>
 
   <!-- Dynamic Celebration Spark Splash -->
-  <div class="confetti-overlay" id="confetti-screen">
+  <div class="confetti-overlay" id="confetti-screen" role="dialog" aria-modal="true" aria-labelledby="confetti-title">
     <div class="confetti-card">
       <div class="confetti-glow"></div>
-      <span class="confetti-icon">🏆</span>
-      <h3 class="confetti-title">ROUTINE CLEAR!</h3>
+      <span class="confetti-icon" role="img" aria-label="Trophy">🏆</span>
+      <h3 class="confetti-title" id="confetti-title">ROUTINE CLEAR!</h3>
       <p class="confetti-desc">All routines for today fully optimized and completed. Streak continues!</p>
-      <button class="btn-glow" id="btn-dismiss-celebration">CONTINUE</button>
+      <button class="btn-glow" id="btn-dismiss-celebration" aria-label="Dismiss celebration and continue">CONTINUE</button>
     </div>
+  </div>
+
+  <!-- Voice Listening Status Overlay -->
+  <div class="voice-overlay" id="voice-listening-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="voice-listening-title" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 3000; align-items: center; justify-content: center; flex-direction: column; gap: 20px;">
+    <div class="listening-ring" id="voice-ring" style="width: 85px; height: 85px; border-radius: 50%; border: 4px solid var(--neon-pink); display: flex; align-items: center; justify-content: center; font-size: 2.5rem; background: var(--bg-card); animation: pulseListening 1.5s infinite;">🎤</div>
+    <h3 id="voice-listening-title" style="color: var(--neon-pink); font-family: var(--font-sans); letter-spacing: 0.1em; text-transform: uppercase; font-weight: 800;">Listening...</h3>
+    <p id="voice-listening-status" style="color: var(--text-gray); font-family: var(--font-mono); font-size: 0.85rem; max-width: 80%; text-align: center; line-height: 1.6;">Try saying: "Add Gym at 9 AM for 45 minutes on Monday and Wednesday"</p>
+    <button class="btn-console border-neon-pink" id="btn-cancel-voice" style="margin-top: 20px;" aria-label="Cancel voice command selection">CANCEL</button>
   </div>
 
   <!-- Boot script -->

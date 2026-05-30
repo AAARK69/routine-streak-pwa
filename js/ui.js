@@ -59,7 +59,7 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick) {
     card.innerHTML = `
       <div class="routine-card-left">
         <label class="custom-checkbox-wrapper" id="check-wrapper-${rt.id}">
-          <input type="checkbox" class="custom-checkbox-input" id="check-${rt.id}" ${isCompleted ? 'checked' : ''}>
+          <input type="checkbox" class="custom-checkbox-input" id="check-${rt.id}" ${isCompleted ? 'checked' : ''} aria-label="Mark ${rt.name} as completed">
           <span class="checkbox-visual"></span>
         </label>
         
@@ -79,7 +79,7 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick) {
       </div>
 
       <div class="routine-card-actions">
-        <button class="btn-edit" id="edit-${rt.id}" aria-label="Edit routine">⚙</button>
+        <button class="btn-edit" id="edit-${rt.id}" aria-label="Edit routine: ${rt.name}">⚙</button>
       </div>
     `;
 
@@ -107,7 +107,7 @@ export function renderMatrix(day, state, onEditClick) {
   const feed = document.getElementById('matrix-conflict-feed');
   feed.innerHTML = '';
 
-  const { conflicts, warnings } = checkConflictsForDay(day, state.routines);
+  const { conflicts, warnings, successes = [] } = checkConflictsForDay(day, state.routines);
   
   if (conflicts.length === 0 && warnings.length === 0) {
     feed.innerHTML = `
@@ -140,6 +140,17 @@ export function renderMatrix(day, state, onEditClick) {
     });
   }
 
+  // Show successes (perfect habit stacks)
+  successes.forEach(s => {
+    const alert = document.createElement('div');
+    alert.className = 'conflict-alert success';
+    alert.innerHTML = `
+      <span class="conflict-alert-icon">✨</span>
+      <span>${s.message}</span>
+    `;
+    feed.appendChild(alert);
+  });
+
   // 2. Render 24-hour rows
   const gridContainer = document.getElementById('matrix-grid-hours');
   gridContainer.innerHTML = '';
@@ -164,12 +175,13 @@ export function renderMatrix(day, state, onEditClick) {
     routinesInHour.forEach(rt => {
       const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
       eventsHtml += `
-        <span class="matrix-event-badge ${hasConflict ? 'overlap-warn' : ''}" 
+        <button class="matrix-event-badge ${hasConflict ? 'overlap-warn' : ''}" 
               style="--accent-color: ${color}; cursor: pointer;" 
-              id="matrix-badge-${rt.id}-${hour}">
+              id="matrix-badge-${rt.id}-${hour}"
+              aria-label="Routine ${rt.name} at ${formatHour(hour)}. Click to edit.">
           <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${color}"></span>
           ${rt.name}
-        </span>
+        </button>
       `;
     });
 
@@ -332,6 +344,8 @@ export function renderTopBarStats(state) {
 
   const percentage = countScheduled > 0 ? Math.round((countCompleted / countScheduled) * 100) : 0;
   bar.style.width = `${percentage}%`;
+  bar.setAttribute('aria-valuenow', percentage);
+  bar.setAttribute('aria-valuetext', `${percentage}% complete today (${countCompleted} of ${countScheduled} routines)`);
 
   if (percentage === 100 && countScheduled > 0) {
     bar.style.boxShadow = '0 0 15px var(--neon-green)';
@@ -495,4 +509,83 @@ export function renderYearGrid(state) {
   if (titleVal) {
     titleVal.textContent = `Annual Goal Progress: ${annualBlueDays} Completed Blue Days`;
   }
+}
+
+/**
+ * --- THEME SELECTOR & DUAL PANE HANDLERS ---
+ */
+
+function applyTheme(themeName) {
+  const body = document.body;
+  
+  // Clean classes
+  body.classList.remove('theme-cyberpunk', 'theme-vaporwave', 'theme-crt', 'theme-mono');
+  
+  // Set new theme
+  if (themeName !== 'default') {
+    body.classList.add(`theme-${themeName}`);
+  } else {
+    body.classList.add('theme-cyberpunk');
+  }
+  
+  // Update active state on all buttons targeting themes
+  document.querySelectorAll('[data-theme]').forEach(btn => {
+    if (btn.getAttribute('data-theme') === themeName) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+}
+
+export function initThemeEngine() {
+  const storedTheme = localStorage.getItem('aether_theme') || 'default';
+  applyTheme(storedTheme);
+  
+  // Delegate clicks on theme buttons
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-theme]');
+    if (btn) {
+      const themeName = btn.getAttribute('data-theme');
+      applyTheme(themeName);
+      localStorage.setItem('aether_theme', themeName);
+      
+      // Play high-tech switch beep sound if available
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(themeName === 'crt' ? 800 : 1200, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+      } catch (e) {
+        // AudioContext blocked or not supported
+      }
+    }
+  });
+
+  // Watch screen size and handle desktop-sidebar redirects automatically
+  function handleDesktopRedirect() {
+    if (window.innerWidth >= 1025) {
+      const activeTabBtn = document.querySelector('.nav-tab.active');
+      if (activeTabBtn && activeTabBtn.id === 'tab-timeline') {
+        const calendarTab = document.getElementById('tab-calendar');
+        if (calendarTab) calendarTab.click();
+      }
+    }
+  }
+
+  window.addEventListener('resize', handleDesktopRedirect);
+  // Run on short delay to ensure tabs are initialized
+  setTimeout(handleDesktopRedirect, 100);
+}
+
+// Automatically bootstrap theme engine once page components load
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', initThemeEngine);
 }

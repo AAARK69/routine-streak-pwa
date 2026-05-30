@@ -121,10 +121,10 @@ export function getStorageState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      // First-time load: populate with high-contrast mock data
+      // First-time load: populate with clean, empty slate for full customizability
       const initialState = {
-        routines: MOCK_ROUTINES,
-        completions: generateMockCompletions()
+        routines: [],
+        completions: {}
       };
       saveStorageState(initialState);
       return initialState;
@@ -137,7 +137,7 @@ export function getStorageState() {
     return state;
   } catch (error) {
     console.error('Failed to read LocalStorage. Initializing fresh store.', error);
-    const fallback = { routines: MOCK_ROUTINES, completions: {} };
+    const fallback = { routines: [], completions: {} };
     saveStorageState(fallback);
     return fallback;
   }

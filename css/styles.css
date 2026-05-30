@@ -1450,45 +1450,78 @@ input[type="range"]::-webkit-slider-thumb {
 .calendar-day-cell {
   aspect-ratio: 1;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 700;
+  flex-direction: row;
+  justify-content: stretch;
+  align-items: stretch;
   border-radius: 4px;
   background: var(--bg-input);
   border: 1px solid #101014;
-  color: var(--text-gray);
   transition: all 0.15s ease;
   position: relative;
+  overflow: hidden;
   cursor: default;
 }
 
 .calendar-day-cell.empty {
   border: none;
   background: transparent;
+  display: block;
 }
 
-.calendar-day-cell.completed {
-  background: rgba(0, 240, 255, 0.15);
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
-  box-shadow: 0 0 6px rgba(0, 240, 255, 0.1);
-}
-
-.calendar-day-cell.missed {
-  background: rgba(255, 45, 85, 0.15);
-  border-color: var(--neon-pink);
-  color: var(--neon-pink);
-  box-shadow: 0 0 6px rgba(255, 45, 85, 0.1);
-}
-
-.calendar-day-symbol {
-  font-size: 0.5rem;
+.calendar-day-number {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   font-weight: 800;
-  margin-top: 2px;
-  line-height: 1;
+  color: var(--text-white);
+  text-shadow: 0 0 3px #000000, 0 0 5px #000000, 0 0 8px #000000;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.calendar-sub-box {
+  flex: 1;
+  height: 100%;
+  border-right: 1px solid rgba(0,0,0,0.3);
+  transition: all 0.2s ease;
+}
+
+.calendar-sub-box:last-child {
+  border-right: none;
+}
+
+.calendar-sub-box.active-completed {
+  background-color: var(--accent-color, var(--neon-green));
+  box-shadow: inset 0 0 4px rgba(255,255,255,0.2);
+}
+
+.calendar-sub-box.active-missed {
+  background-color: rgba(255, 45, 85, 0.45);
+  box-shadow: inset 0 0 4px rgba(255, 45, 85, 0.3);
+}
+
+.calendar-sub-box.inactive {
+  background-color: #07070a;
+  opacity: 0.2;
+}
+
+.calendar-sub-box.future {
+  background-color: #0d0d11;
+  opacity: 0.45;
+}
+
+.legend-col-chip {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--accent-color, var(--neon-cyan));
+  color: var(--accent-color, var(--neon-cyan));
+  background: rgba(0,0,0,0.4);
 }
 
 .month-completion-footer {

@@ -401,6 +401,30 @@ export function renderTopBarStats(state) {
  * Render 12-Month Themed Annual Calendar grid (Cyberpunk High-Contrast version of user goal sheet)
  */
 export function renderYearGrid(state) {
+  // 1. Render Columns Decode Legend Key at the top
+  const legendList = document.getElementById('calendar-legend-list');
+  if (legendList) {
+    legendList.innerHTML = '';
+    if (state.routines.length === 0) {
+      legendList.innerHTML = `
+        <span style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);">
+          No active habits configured. Configure routines in the Timeline to track columns!
+        </span>
+      `;
+    } else {
+      // Sort routines consistently by ID so column mappings are stable in every cell!
+      const sortedRoutines = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
+      sortedRoutines.forEach((rt, index) => {
+        const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+        const chip = document.createElement('span');
+        chip.className = 'legend-col-chip';
+        chip.style.setProperty('--accent-color', color);
+        chip.textContent = `Col ${index + 1}: ${rt.name}`;
+        legendList.appendChild(chip);
+      });
+    }
+  }
+
   const container = document.getElementById('year-calendar-grid');
   if (!container) return;
   container.innerHTML = '';
@@ -424,6 +448,9 @@ export function renderYearGrid(state) {
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   
   let annualBlueDays = 0;
+  
+  // Sort routines consistently for day-cells as well!
+  const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
 
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
@@ -449,37 +476,55 @@ export function renderYearGrid(state) {
       const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
       
       const isFuture = cellDate > todayMidnight;
-      const scheduledRoutines = state.routines.filter(r => r.days.includes(dow));
-      const completedRoutines = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+      
+      let subBoxesHtml = '';
 
-      let cellClass = '';
-      let symbol = '';
+      if (sortedRoutinesForCells.length === 0) {
+        // Blank slate visual
+        const statusClass = isFuture ? 'future' : 'inactive';
+        subBoxesHtml = `<span class="calendar-sub-box ${statusClass}"></span>`;
+      } else {
+        let hasActiveRoutine = false;
+        let completedAtLeastOne = false;
 
-      if (scheduledRoutines.length > 0) {
-        if (isFuture) {
-          cellClass = 'future';
-          symbol = '';
-        } else {
+        sortedRoutinesForCells.forEach(rt => {
+          const isScheduled = rt.days.includes(dow);
+          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+          
+          let statusClass = 'inactive';
+
+          if (isScheduled) {
+            hasActiveRoutine = true;
+            if (isFuture) {
+              statusClass = 'future';
+            } else {
+              const completionsOnDate = state.completions[dateStr] || [];
+              const isDone = completionsOnDate.includes(rt.id);
+              if (isDone) {
+                statusClass = 'active-completed';
+                completedAtLeastOne = true;
+              } else {
+                statusClass = 'active-missed';
+              }
+            }
+          }
+
+          subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
+        });
+
+        if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
-          if (completedRoutines.length > 0) {
-            cellClass = 'completed';
-            symbol = '✓';
+          if (completedAtLeastOne) {
             completedDaysInMonth++;
             annualBlueDays++;
-          } else {
-            cellClass = 'missed';
-            symbol = '🗙';
           }
         }
-      } else {
-        // Neutral day (no routines scheduled)
-        if (isFuture) cellClass = 'future';
       }
 
       daysHtml += `
-        <span class="calendar-day-cell ${cellClass}">
-          ${day}
-          ${symbol ? `<span class="calendar-day-symbol">${symbol}</span>` : ''}
+        <span class="calendar-day-cell">
+          <span class="calendar-day-number">${day}</span>
+          ${subBoxesHtml}
         </span>
       `;
     }
@@ -504,7 +549,7 @@ export function renderYearGrid(state) {
     container.appendChild(monthCard);
   });
 
-  // Update top title summary (e.g. "Annual Goal Progress: 24 Blue Days")
+  // Update top title summary (e.g. "Annual Goal Progress: 24 Completed Blue Days")
   const titleVal = document.getElementById('annual-goal-subtitle');
   if (titleVal) {
     titleVal.textContent = `Annual Goal Progress: ${annualBlueDays} Completed Blue Days`;

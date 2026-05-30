@@ -1,14 +1,14 @@
 const CACHE_NAME = 'aether-cache-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/css/styles.css',
-  '/js/app.js',
-  '/js/storage.js',
-  '/js/scheduler.js',
-  '/js/ui.js',
-  '/manifest.json',
-  '/favicon.svg'
+  './',
+  'index.html',
+  'css/styles.css',
+  'js/app.js',
+  'js/storage.js',
+  'js/scheduler.js',
+  'js/ui.js',
+  'manifest.json',
+  'favicon.svg'
 ];
 
 // Install Event - Pre-cache core shell

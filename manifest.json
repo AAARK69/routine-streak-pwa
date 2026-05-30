@@ -1,0 +1,18 @@
+{
+  "name": "Aether local Routine & Streak Grid",
+  "short_name": "Aether",
+  "description": "High-contrast mobile-first local routine optimizer and streak-keeping calendar.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Aether // local Routine & Streak Grid</title>
+  
+  <!-- SEO & PWA Meta Tags -->
+  <meta name="description" content="High-contrast mobile-first local routine optimizer and streak-keeping calendar using university-style matrix optimization.">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <!-- PWA Manifest & Favicon -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+  <!-- Top App Header / Global Stats -->
+  <header class="app-header">
+    <div class="logo-area">
+      <span class="logo-glow"></span>
+      <h1 id="app-title">Aether <span class="version-tag">v1.0</span></h1>
+    </div>
+    
+    <!-- Top Summary Banner -->
+    <div class="global-tracker">
+      <div class="metric-chip" id="overall-streak-chip">
+        <span class="metric-label">GLOBAL STREAK</span>
+        <span class="metric-val" id="global-streak-count">0</span>
+      </div>
+      <div class="metric-chip" id="daily-completion-chip">
+        <span class="metric-label">COMPLETED</span>
+        <span class="metric-val" id="today-completion-ratio">0/0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Progress Bar (Glowing Track) -->
+  <div class="glowing-progress-container">
+    <div class="glowing-progress-bar" id="today-progress" style="width: 0%;"></div>
+  </div>
+
+  <!-- Day Selection Slider (for Matrix & Timeline focus) -->
+  <nav class="day-navigation">
+    <button class="day-btn" data-day="1" id="btn-day-mon">MON</button>
+    <button class="day-btn" data-day="2" id="btn-day-tue">TUE</button>
+    <button class="day-btn" data-day="3" id="btn-day-wed">WED</button>
+    <button class="day-btn" data-day="4" id="btn-day-thu">THU</button>
+    <button class="day-btn" data-day="5" id="btn-day-fri">FRI</button>
+    <button class="day-btn text-accent-pink" data-day="6" id="btn-day-sat">SAT</button>
+    <button class="day-btn text-accent-pink" data-day="0" id="btn-day-sun">SUN</button>
+  </nav>
+
+  <!-- Main View Screens Container -->
+  <main class="app-viewport">
+    
+    <!-- TAB 1: TIMELINE / TODAY VIEW -->
+    <section id="view-timeline" class="view-panel active">
+      <div class="view-header">
+        <h2>Schedule Timeline</h2>
+        <p class="view-subtitle" id="selected-day-label">Monday Routines</p>
+      </div>
+
+      <div class="timeline-container" id="timeline-list">
+        <!-- Chronological cards rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- TAB 2: RULES MATRIX & OPTIMIZER -->
+    <section id="view-matrix" class="view-panel">
+      <div class="view-header flex-header">
+        <div>
+          <h2>Optimization Matrix</h2>
+          <p class="view-subtitle">Course-Style Multi-Constraint Engine</p>
+        </div>
+        <button class="btn-glow" id="btn-run-optimizer">
+          <span class="btn-icon">⚡</span> AUTO-OPTIMIZE
+        </button>
+      </div>
+
+      <!-- Conflicts Alert Feed -->
+      <div class="conflict-feed" id="matrix-conflict-feed">
+        <!-- Live warnings/conflicts render here -->
+      </div>
+
+      <!-- 24-Hour Schedule Matrix Grid -->
+      <div class="matrix-grid-card">
+        <div class="matrix-grid-headers">
+          <div class="time-col-header">Hour</div>
+          <div class="event-col-header">Routine Allocations</div>
+        </div>
+        <div class="matrix-grid" id="matrix-grid-hours">
+          <!-- 24 Rows generated dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: STREAK CALENDAR -->
+    <section id="view-streaks" class="view-panel">
+      <div class="view-header">
+        <h2>Habit Streak Calendar</h2>
+        <p class="view-subtitle">Aether Streak-keeping Heatmap Grid</p>
+      </div>
+
+      <!-- Grid and stats -->
+      <div class="streak-analytics-dashboard">
+        <div class="streak-card-stat">
+          <span class="stat-number" id="stats-total-routines">0</span>
+          <span class="stat-label">Tracked Routines</span>
+        </div>
+        <div class="streak-card-stat">
+          <span class="stat-number" id="stats-total-completions">0</span>
+          <span class="stat-label">Completions Logged</span>
+        </div>
+        <div class="streak-card-stat">
+          <span class="stat-number" id="stats-average-completion">0%</span>
+          <span class="stat-label">Completion Yield</span>
+        </div>
+      </div>
+
+      <div class="heatmap-container-card">
+        <h3 class="card-title">Activity Grid (Past 30 Days)</h3>
+        <div class="heatmap-grid-scroll">
+          <div class="heatmap-grid" id="streak-heatmap-grid">
+            <!-- 30 boxes generated dynamically -->
+          </div>
+        </div>
+        <div class="heatmap-legend">
+          <span>Less Active</span>
+          <div class="legend-cell color-0"></div>
+          <div class="legend-cell color-1"></div>
+          <div class="legend-cell color-2"></div>
+          <div class="legend-cell color-3"></div>
+          <span>Fully Active</span>
+        </div>
+      </div>
+
+      <!-- Individual routine heatmaps list -->
+      <div class="routine-streaks-list" id="routine-streaks-container">
+        <!-- Dynamic streak breakdowns -->
+      </div>
+    </section>
+
+    <!-- TAB 4: SETTINGS / BACKUP -->
+    <section id="view-settings" class="view-panel">
+      <div class="view-header">
+        <h2>Data Console</h2>
+        <p class="view-subtitle">Local-First Storage Control & Validation</p>
+      </div>
+
+      <div class="settings-grid">
+        <div class="settings-card">
+          <h3 class="settings-card-title text-accent-cyan">Export & Backup</h3>
+          <p class="settings-card-desc">Download your entire schedule schema and completion history to a JSON file. Store backups securely.</p>
+          <button class="btn-console" id="btn-export-json">DOWNLOAD BACKUP JSON</button>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-card-title text-accent-green">Import & Restore</h3>
+          <p class="settings-card-desc">Upload a valid Aether Routine JSON schema. It validates conflicts and restores your schedule state.</p>
+          
+          <div class="file-upload-wrapper">
+            <input type="file" id="import-file-input" accept=".json" class="hidden-file-input">
+            <button class="btn-console border-neon-cyan" id="btn-trigger-upload">UPLOAD & OVERWRITE</button>
+          </div>
+          <p class="import-status-text text-accent-pink" id="import-status-label"></p>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-card-title text-accent-orange">Factory Mock Load</h3>
+          <p class="settings-card-desc">Reset the current LocalStorage database and fill with highly structured university-schedule dummy data to inspect conflict checks.</p>
+          <button class="btn-console border-neon-orange" id="btn-restore-mock">LOAD DUMMY DATA</button>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-card-title text-accent-pink">Hard Database Reset</h3>
+          <p class="settings-card-desc">Irreversibly erase all routines and completion logs from this browser instance. Be careful.</p>
+          <button class="btn-console bg-neon-pink" id="btn-clear-database">WIPE DATABASE</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Add Routine Floating Action Button -->
+  <button class="fab-btn" id="btn-open-add-modal" aria-label="Add Routine">+</button>
+
+  <!-- Bottom Navigation Menu -->
+  <nav class="bottom-tabs-nav">
+    <button class="nav-tab active" data-target="view-timeline" id="tab-timeline">
+      <span class="tab-icon">⚡</span>
+      <span class="tab-label">Timeline</span>
+    </button>
+    <button class="nav-tab" data-target="view-matrix" id="tab-matrix">
+      <span class="tab-icon">📐</span>
+      <span class="tab-label">Matrix</span>
+    </button>
+    <button class="nav-tab" data-target="view-streaks" id="tab-streaks">
+      <span class="tab-icon">🔥</span>
+      <span class="tab-label">Streaks</span>
+    </button>
+    <button class="nav-tab" data-target="view-settings" id="tab-settings">
+      <span class="tab-icon">💾</span>
+      <span class="tab-label">Data</span>
+    </button>
+  </nav>
+
+  <!-- ADD / EDIT ROUTINE MODAL -->
+  <div class="modal-overlay" id="routine-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">Configure Routine</h3>
+        <button class="modal-close" id="btn-close-modal">&times;</button>
+      </div>
+      <form id="routine-form" autocomplete="off">
+        <input type="hidden" id="form-routine-id" value="">
+        
+        <div class="form-group">
+          <label for="form-name">Routine Name</label>
+          <input type="text" id="form-name" required placeholder="e.g. Comp Sci 101 Lecture">
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="form-category">Category</label>
+            <select id="form-category">
+              <option value="Academics">Academics</option>
+              <option value="Health">Health</option>
+              <option value="Work">Work</option>
+              <option value="Leisure">Leisure</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="form-conflict-group">Conflict Group</label>
+            <input type="text" id="form-conflict-group" placeholder="e.g. studying, gym">
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="form-energy">Energy Demand (1-5)</label>
+            <input type="range" id="form-energy" min="1" max="5" value="3">
+            <span class="slider-val-badge" id="energy-badge">3</span>
+          </div>
+          <div class="form-group">
+            <label for="form-priority">Priority Weight (1-5)</label>
+            <input type="range" id="form-priority" min="1" max="5" value="3">
+            <span class="slider-val-badge" id="priority-badge">3</span>
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="form-duration">Duration (Minutes)</label>
+            <input type="number" id="form-duration" min="5" max="1440" value="60" required>
+          </div>
+          <div class="form-group">
+            <label for="form-target-hour">Target Hour (0-23)</label>
+            <select id="form-target-hour">
+              <!-- Hour options generated dynamically -->
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="form-preferred-block">Preferred Time Block</label>
+          <select id="form-preferred-block">
+            <option value="morning">Morning (06:00 - 12:00)</option>
+            <option value="afternoon">Afternoon (12:00 - 18:00)</option>
+            <option value="evening">Evening (18:00 - 24:00)</option>
+            <option value="night">Night (00:00 - 06:00)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Scheduled Days</label>
+          <div class="days-checkbox-grid">
+            <label class="day-checkbox-label">
+              <input type="checkbox" value="1" class="day-checkbox">
+              <span>M</span>
+            </label>
+            <label class="day-checkbox-label">
+              <input type="checkbox" value="2" class="day-checkbox">
+              <span>T</span>
+            </label>
+            <label class="day-checkbox-label">
+              <input type="checkbox" value="3" class="day-checkbox">
+              <span>W</span>
+            </label>
+            <label class="day-checkbox-label">
+              <input type="checkbox" value="4" class="day-checkbox">
+              <span>T</span>
+            </label>
+            <label class="day-checkbox-label">
+              <input type="checkbox" value="5" class="day-checkbox">
+              <span>F</span>
+            </label>
+            <label class="day-checkbox-label text-accent-pink">
+              <input type="checkbox" value="6" class="day-checkbox">
+              <span>S</span>
+            </label>
+            <label class="day-checkbox-label text-accent-pink">
+              <input type="checkbox" value="0" class="day-checkbox">
+              <span>S</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-console bg-dark border-neon-pink hidden" id="btn-delete-routine">DELETE</button>
+          <button type="submit" class="btn-glow flex-grow" id="btn-submit-routine">SAVE ROUTINE</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Dynamic Celebration Spark Splash -->
+  <div class="confetti-overlay" id="confetti-screen">
+    <div class="confetti-card">
+      <div class="confetti-glow"></div>
+      <span class="confetti-icon">🏆</span>
+      <h3 class="confetti-title">ROUTINE CLEAR!</h3>
+      <p class="confetti-desc">All routines for today fully optimized and completed. Streak continues!</p>
+      <button class="btn-glow" id="btn-dismiss-celebration">CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- Boot script -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

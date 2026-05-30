@@ -8,7 +8,7 @@ import { renderTimeline, renderMatrix, renderStreaks, renderTopBarStats, renderY
 // App State
 let state = getStorageState();
 let selectedDay = new Date().getDay(); // Default to today's day of week
-let currentTab = 'view-timeline';
+let currentTab = 'view-calendar';
 
 /**
  * Initialize application and bind events

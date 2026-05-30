@@ -65,7 +65,7 @@
   <main class="app-viewport">
     
     <!-- TAB 1: TIMELINE / TODAY VIEW -->
-    <section id="view-timeline" class="view-panel active">
+    <section id="view-timeline" class="view-panel">
       <div class="view-header">
         <h2>Schedule Timeline</h2>
         <p class="view-subtitle" id="selected-day-label">Monday Routines</p>
@@ -152,7 +152,7 @@
     </section>
 
     <!-- TAB 4: YEARLY CALENDAR GRID -->
-    <section id="view-calendar" class="view-panel">
+    <section id="view-calendar" class="view-panel active">
       <div class="view-header">
         <h2>Annual Habit Grid</h2>
         <p class="view-subtitle" id="annual-goal-subtitle">Annual Goal Progress: 0 Completed Blue Days</p>
@@ -212,7 +212,11 @@
 
   <!-- Bottom Navigation Menu -->
   <nav class="bottom-tabs-nav">
-    <button class="nav-tab active" data-target="view-timeline" id="tab-timeline">
+    <button class="nav-tab active" data-target="view-calendar" id="tab-calendar">
+      <span class="tab-icon">🗓️</span>
+      <span class="tab-label">Calendar</span>
+    </button>
+    <button class="nav-tab" data-target="view-timeline" id="tab-timeline">
       <span class="tab-icon">⚡</span>
       <span class="tab-label">Timeline</span>
     </button>
@@ -223,10 +227,6 @@
     <button class="nav-tab" data-target="view-streaks" id="tab-streaks">
       <span class="tab-icon">🔥</span>
       <span class="tab-label">Streaks</span>
-    </button>
-    <button class="nav-tab" data-target="view-calendar" id="tab-calendar">
-      <span class="tab-icon">🗓️</span>
-      <span class="tab-label">Calendar</span>
     </button>
     <button class="nav-tab" data-target="view-settings" id="tab-settings">
       <span class="tab-icon">💾</span>

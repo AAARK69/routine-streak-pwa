@@ -101,7 +101,7 @@ function refreshAllUI() {
   } else if (currentTab === 'view-streaks') {
     renderStreaks(state);
   } else if (currentTab === 'view-calendar') {
-    renderYearGrid(state);
+    renderYearGrid(state, handleCalendarDayClick);
   }
   
   // Check if daily routines completed for a celebratory overlay trigger
@@ -195,7 +195,83 @@ function initAppNavigation() {
 }
 
 /**
- * Handle routine completion toggle
+ * Handle clicking a calendar day cell — opens the Day Edit Modal
+ */
+function handleCalendarDayClick(dateStr, dow) {
+  const modal = document.getElementById('day-edit-modal');
+  const title = document.getElementById('day-edit-title');
+  const list = document.getElementById('day-edit-habit-list');
+  const closeBtn = document.getElementById('btn-close-day-edit');
+  if (!modal || !list) return;
+
+  const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [year, month, day] = dateStr.split('-').map(Number);
+  title.textContent = `${DAY_NAMES[dow]}, ${MONTH_NAMES[month - 1]} ${day} ${year}`;
+
+  // Routines scheduled on this day of week
+  const scheduledRoutines = state.routines.filter(rt => rt.days.includes(dow));
+
+  list.innerHTML = '';
+
+  if (scheduledRoutines.length === 0) {
+    list.innerHTML = `<p class="day-edit-empty">No habits scheduled for ${DAY_NAMES[dow]}.<br>Add routines in the Timeline tab first.</p>`;
+  } else {
+    scheduledRoutines.forEach(rt => {
+      const completions = state.completions[dateStr] || [];
+      const isDone = completions.includes(rt.id);
+      const color = { Academics: '#00f0ff', Health: '#00ff88', Work: '#ff9500', Leisure: '#ff6b8b' }[rt.category] || '#00f0ff';
+
+      const row = document.createElement('label');
+      row.className = `day-edit-row${isDone ? ' done' : ''}`;
+      row.style.setProperty('--accent-color', color);
+      row.innerHTML = `
+        <span class="day-edit-color-dot" style="background:${color}; box-shadow: 0 0 8px ${color}"></span>
+        <span class="day-edit-name">${escapeForDisplay(rt.name)}</span>
+        <span class="day-edit-meta">${rt.category} · ${rt.targetHour.toString().padStart(2,'0')}:00</span>
+        <input type="checkbox" class="day-edit-checkbox" data-id="${rt.id}" ${isDone ? 'checked' : ''} aria-label="Toggle ${escapeForDisplay(rt.name)}">
+        <span class="day-edit-toggle-track"><span class="day-edit-toggle-thumb"></span></span>
+      `;
+
+      // Toggle handler — saves immediately
+      const checkbox = row.querySelector('.day-edit-checkbox');
+      checkbox.addEventListener('change', async () => {
+        if (!state.completions[dateStr]) state.completions[dateStr] = [];
+        const list = state.completions[dateStr];
+        const idx = list.indexOf(rt.id);
+        if (checkbox.checked) {
+          if (idx === -1) list.push(rt.id);
+          row.classList.add('done');
+          playChime();
+        } else {
+          if (idx > -1) list.splice(idx, 1);
+          row.classList.remove('done');
+          playClick();
+        }
+        await saveStorageState(state);
+        // Live-update the calendar behind the modal without closing it
+        renderYearGrid(state, handleCalendarDayClick);
+      });
+
+      list.appendChild(row);
+    });
+  }
+
+  modal.classList.add('active');
+  modal.setAttribute('aria-hidden', 'false');
+  closeBtn && closeBtn.focus();
+  lastActiveElement = document.activeElement;
+  playClick();
+}
+
+// Simple HTML escaper for display-only contexts (modal title/labels)
+function escapeForDisplay(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/**
+ * Handle routine completion toggle (today only — from Timeline view)
  */
 async function handleToggleCompletion(routineId) {
   const todayStr = new Date().toISOString().split('T')[0];
@@ -350,6 +426,30 @@ function initModalTriggers() {
   modal.addEventListener('keydown', (e) => {
     trapFocus(e, modal);
   });
+
+  // === Day Edit Modal close wiring ===
+  const dayEditModal = document.getElementById('day-edit-modal');
+  if (dayEditModal) {
+    const closeDayEdit = () => {
+      dayEditModal.classList.remove('active');
+      dayEditModal.setAttribute('aria-hidden', 'true');
+      if (lastActiveElement) lastActiveElement.focus();
+    };
+
+    document.getElementById('btn-close-day-edit').addEventListener('click', () => {
+      playClick();
+      closeDayEdit();
+    });
+
+    dayEditModal.addEventListener('click', (e) => {
+      if (e.target === dayEditModal) { playClick(); closeDayEdit(); }
+    });
+
+    dayEditModal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { playClick(); closeDayEdit(); }
+      trapFocus(e, dayEditModal);
+    });
+  }
 }
 
 function handleOpenAddModal() {

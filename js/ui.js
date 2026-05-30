@@ -473,7 +473,7 @@ export function renderTopBarStats(state) {
 /**
  * Render 12-Month Themed Annual Calendar grid (Cyberpunk High-Contrast version of user goal sheet)
  */
-export function renderYearGrid(state) {
+export function renderYearGrid(state, onDayClick = null) {
   // 1. Render Columns Decode Legend Key at the top
   const legendList = document.getElementById('calendar-legend-list');
   if (legendList) {
@@ -597,11 +597,19 @@ export function renderYearGrid(state) {
         }
       }
 
+      const isFutureCell = cellDate > todayMidnight;
+      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
+      const isClickable = !isFutureCell || hasRoutinesOnDay;
+
       daysHtml += `
-        <span class="calendar-day-cell">
+        <button class="calendar-day-cell${isClickable ? ' clickable' : ''}" 
+          data-date="${dateStr}" 
+          data-dow="${dow}"
+          aria-label="${month.name} ${day} 2026 — click to edit habit completions"
+          ${!isClickable ? 'disabled' : ''}>
           <span class="calendar-day-number">${day}</span>
           ${subBoxesHtml}
-        </span>
+        </button>
       `;
     }
 
@@ -627,6 +635,17 @@ export function renderYearGrid(state) {
 
   container.innerHTML = '';
   container.appendChild(yearFragment);
+
+  // Wire up click delegation for day-cell editing
+  if (onDayClick) {
+    container.addEventListener('click', (e) => {
+      const cell = e.target.closest('.calendar-day-cell.clickable');
+      if (!cell) return;
+      const dateStr = cell.getAttribute('data-date');
+      const dow = parseInt(cell.getAttribute('data-dow'), 10);
+      onDayClick(dateStr, dow);
+    }, { once: false });
+  }
 
   // Update top title summary (e.g. "Annual Goal Progress: 24 Completed Blue Days")
   const titleVal = document.getElementById('annual-goal-subtitle');

@@ -1570,6 +1570,32 @@ input[type="range"]::-webkit-slider-thumb {
   position: relative;
   overflow: hidden;
   cursor: default;
+  /* Reset button defaults since we made these <button> elements */
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  text-align: inherit;
+}
+
+/* Clickable variant — has hover/active states */
+.calendar-day-cell.clickable {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .calendar-day-cell.clickable:hover {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan), inset 0 0 4px rgba(0, 240, 255, 0.1);
+    transform: scale(1.08);
+    z-index: 2;
+  }
+}
+.calendar-day-cell.clickable:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+  z-index: 2;
+}
+.calendar-day-cell.clickable:active {
+  transform: scale(0.97);
 }
 
 /* Graceful degradation aspect-ratio fallback for legacy WebKit */
@@ -2603,4 +2629,160 @@ body.theme-mono .glowing-progress-bar {
 .connector-badge:focus-visible {
   outline: 2px solid var(--neon-cyan);
   outline-offset: 2px;
+}
+
+/* =============================================
+   DAY EDIT MODAL — Calendar Day Habit Toggler
+   ============================================= */
+
+/* Modal content override for smaller day-edit panel */
+.day-edit-content {
+  max-width: 480px;
+  width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Icon + title layout */
+.day-edit-header-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.day-edit-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: -4px 0 12px 0;
+  padding: 0 4px;
+  letter-spacing: 0.04em;
+}
+
+/* Scrollable habit rows container */
+.day-edit-habit-list {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Each habit row — acts as a toggle label */
+.day-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+
+@media (hover: hover) {
+  .day-edit-row:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--accent-color, var(--neon-cyan));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-color, var(--neon-cyan)) 30%, transparent);
+  }
+}
+
+/* Completed state */
+.day-edit-row.done {
+  background: color-mix(in srgb, var(--accent-color, var(--neon-cyan)) 12%, transparent);
+  border-color: var(--accent-color, var(--neon-cyan));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-color, var(--neon-cyan)) 25%, transparent);
+}
+
+/* Color indicator dot */
+.day-edit-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.day-edit-row.done .day-edit-color-dot {
+  transform: scale(1.3);
+}
+
+/* Habit name */
+.day-edit-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-white);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.2s ease;
+}
+.day-edit-row.done .day-edit-name {
+  color: var(--accent-color, var(--neon-cyan));
+}
+
+/* Category & time meta */
+.day-edit-meta {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Hide the real checkbox */
+.day-edit-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Custom toggle switch track */
+.day-edit-toggle-track {
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.day-edit-row.done .day-edit-toggle-track {
+  background: color-mix(in srgb, var(--accent-color, var(--neon-cyan)) 40%, transparent);
+  border-color: var(--accent-color, var(--neon-cyan));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-color, var(--neon-cyan)) 50%, transparent);
+}
+
+/* Toggle thumb */
+.day-edit-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s ease;
+}
+.day-edit-row.done .day-edit-toggle-thumb {
+  transform: translateX(16px);
+  background: var(--text-white);
+}
+
+/* Empty state message */
+.day-edit-empty {
+  text-align: center;
+  padding: 28px 16px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.6;
 }

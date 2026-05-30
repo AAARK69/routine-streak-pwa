@@ -9,6 +9,7 @@
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <script>const CACHE_NAME = 'aether-cache-v13';</script>
   <title>Aether // local Routine & Streak Grid</title>
   
   <!-- SEO & PWA Meta Tags -->
@@ -35,7 +36,7 @@
   <header class="app-header">
     <div class="logo-area">
       <span class="logo-glow"></span>
-      <h1 id="app-title">Aether <span class="version-tag">v2.2</span></h1>
+      <h1 id="app-title">Aether <span class="version-tag">v2.3</span></h1>
       <div class="theme-header-pills">
         <button class="theme-pill active" data-theme="default" title="Cyberpunk">⚡</button>
         <button class="theme-pill" data-theme="vaporwave" title="Vaporwave">🌴</button>
@@ -287,6 +288,19 @@
       <span class="tab-label">Data</span>
     </button>
   </nav>
+
+  <!-- DAY EDIT MODAL — click any calendar day to toggle habits -->
+  <div class="modal-overlay" id="day-edit-modal" role="dialog" aria-modal="true" aria-labelledby="day-edit-title" aria-hidden="true">
+    <div class="modal-content day-edit-content">
+      <div class="modal-header">
+        <div class="day-edit-header-icon">📅</div>
+        <h3 id="day-edit-title">Edit Day</h3>
+        <button class="modal-close" id="btn-close-day-edit" aria-label="Close day edit dialog">&times;</button>
+      </div>
+      <p class="day-edit-subtitle">Toggle each habit to mark it complete or missed for this day.</p>
+      <div id="day-edit-habit-list" class="day-edit-habit-list"></div>
+    </div>
+  </div>
 
   <!-- ADD / EDIT ROUTINE MODAL -->
   <div class="modal-overlay" id="routine-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">

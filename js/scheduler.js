@@ -66,7 +66,12 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
   let runningStreak = 0;
   
   let checkDate = new Date(startDate);
+  let daysSwept = 0;
   while (checkDate <= today) {
+    daysSwept++;
+    if (daysSwept > 1000) {
+      break; // Safety breakout for ancient or corrupt date imports
+    }
     const checkStr = checkDate.toISOString().split('T')[0];
     const dayOfWeek = checkDate.getDay();
     

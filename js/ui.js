@@ -355,12 +355,26 @@ export function renderTopBarStats(state) {
 
   // 2. Global Streak Calculation
   // Consecutives days looking backward from today where at least 1 task was completed
+  const hasAnyScheduledRoutines = state.routines.some(r => r.days && r.days.length > 0);
+  if (!hasAnyScheduledRoutines) {
+    document.getElementById('global-streak-count').textContent = '0';
+    return {
+      isAllClearToday: false
+    };
+  }
+
   let globalStreak = 0;
   let checkDate = new Date();
   let streakBroken = false;
   let isFirstCheck = true;
+  let daysChecked = 0;
 
   while (!streakBroken) {
+    daysChecked++;
+    if (daysChecked > 365) {
+      break; // Safety break to prevent infinite loops under empty schedules
+    }
+
     const checkStr = checkDate.toISOString().split('T')[0];
     const completedOnDay = state.completions[checkStr] || [];
     

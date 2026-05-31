@@ -273,11 +273,19 @@ export function renderStreaks(state) {
   });
   statsCompletions.textContent = totalLoggedCompletions;
 
+  // Cache valid routine IDs for O(1) lookups instead of O(N) array search inside loops
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
+
   // Calculate yield percentage of completed items over scheduled days
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
   
   const today = new Date();
+
+  // 2. Renders 30-Day Activity Grid Heatmap
+  const heatmapGrid = document.getElementById('streak-heatmap-grid');
+  const heatmapFragment = document.createDocumentFragment();
+
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
@@ -291,29 +299,12 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
+    const validCompletions = completedIds.filter(id => validRoutineIds.has(id));
     totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
-
-  // 2. Renders 30-Day Activity Grid Heatmap
-  const heatmapGrid = document.getElementById('streak-heatmap-grid');
-  const heatmapFragment = document.createDocumentFragment();
-
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
-
-    const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
 
     let intensity = 0; // default empty
-    if (scheduled.length > 0) {
-      const pct = completed.length / scheduled.length;
+    if (scheduledRoutines.length > 0) {
+      const pct = validCompletions.length / scheduledRoutines.length;
       if (pct === 0) intensity = 0;
       else if (pct < 0.4) intensity = 1;
       else if (pct < 0.8) intensity = 2;
@@ -325,10 +316,13 @@ export function renderStreaks(state) {
     
     // Simple native tooltip description
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
+    cell.title = `${formattedDate}: Completed ${validCompletions.length}/${scheduledRoutines.length} (${Math.round((scheduledRoutines.length > 0 ? validCompletions.length/scheduledRoutines.length : 0)*100)}%)`;
 
     heatmapFragment.appendChild(cell);
   }
+
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);
@@ -345,15 +339,21 @@ export function renderStreaks(state) {
 
   const streakFragment = document.createDocumentFragment();
 
+  // Cache streaks to prevent O(N^2) calculateStreak calls during sort and map
+  const streakCache = new Map();
+  state.routines.forEach(rt => {
+    streakCache.set(rt.id, calculateStreak(rt, state.completions, todayStr));
+  });
+
   // Sort routines by priority / streak
   const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
+    const sA = streakCache.get(a.id);
+    const sB = streakCache.get(b.id);
     return sB.currentStreak - sA.currentStreak;
   });
 
   sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+    const { currentStreak, maxStreak } = streakCache.get(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');

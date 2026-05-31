@@ -1,0 +1,3 @@
+## $(date +%Y-%m-%d) - Optimize O(N^2) streak calculations in UI render
+**Learning:** The previous implementation of `renderStreaks` ran an O(N) array search `state.routines.some()` inside a 30-day loop, leading to redundant checks. It also ran `calculateStreak()` on every item pair during array sort, causing an O(N^2) evaluation where `calculateStreak` itself parses strings to compute max streaks.
+**Action:** Replaced array filtering inside loops with an O(1) `Set` lookup of valid routine IDs. Also introduced a `Map` memoization for `calculateStreak` called prior to array sort, reducing execution complexity drastically.

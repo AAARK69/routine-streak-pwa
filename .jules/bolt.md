@@ -1,0 +1,3 @@
+## 2026-06-01 - O(n^2) nested loops in routine-streak-pwa global streak calculation
+**Learning:** Found an $O(N^2)$ nested loop structure nested inside a 365-day loop in `js/ui.js` `renderTopBarStats()` for streak calculation, which can slow down client-side rendering significantly. Avoid filtering objects using arrays within heavy loops.
+**Action:** Always pre-compute valid reference sets (like `Set(routine.id)`) before loops to reduce complexity from $O(N^2)$ to $O(1)$ lookups in any frontend iteration logic. Also, clean up unintentional artifacts like `package-lock.json` and `.gitignore` if the project wasn't previously versioning them, to prevent manager conflicts.

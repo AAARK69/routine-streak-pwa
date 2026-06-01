@@ -428,6 +428,11 @@ export function renderTopBarStats(state) {
   let isFirstCheck = true;
   let daysChecked = 0;
 
+  // ⚡ Bolt Optimization: Pre-compute sets to turn O(n^2) nested lookups inside a 365-day loop into O(1)
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
+  const daysWithRoutines = new Set();
+  state.routines.forEach(r => r.days.forEach(d => daysWithRoutines.add(d)));
+
   while (!streakBroken) {
     daysChecked++;
     if (daysChecked > 365) {
@@ -437,19 +442,20 @@ export function renderTopBarStats(state) {
     const checkStr = checkDate.toISOString().split('T')[0];
     const completedOnDay = state.completions[checkStr] || [];
     
-    // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
+    // Count only currently valid routines completed (O(m) instead of O(n*m))
+    const validComps = completedOnDay.filter(id => validRoutineIds.has(id));
     const dayOfWeek = checkDate.getDay();
-    const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
+    // Check if routines are scheduled today (O(1) instead of O(n))
+    const hasRoutinesScheduled = daysWithRoutines.has(dayOfWeek);
 
     if (validComps.length > 0) {
       globalStreak++;
     } else {
       // If it's today and they have scheduled routines but haven't completed any yet,
       // don't break the streak unless they completed nothing yesterday too.
-      if (isFirstCheck && checkStr === todayStr && routinesScheduled.length > 0) {
+      if (isFirstCheck && checkStr === todayStr && hasRoutinesScheduled) {
         // Keep checking yesterday
-      } else if (routinesScheduled.length === 0) {
+      } else if (!hasRoutinesScheduled) {
         // If nothing was scheduled, a miss doesn't break the streak
       } else {
         streakBroken = true;

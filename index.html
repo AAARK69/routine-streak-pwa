@@ -210,48 +210,75 @@
     <!-- TAB 4: SETTINGS / BACKUP -->
     <section id="view-settings" class="view-panel" role="tabpanel" aria-labelledby="tab-settings">
       <div class="view-header">
-        <h2>Data Console</h2>
-        <p class="view-subtitle">Local-First Storage Control & Validation</p>
+        <h2>Settings & Customizability</h2>
+        <p class="view-subtitle">Tailor the Aether platform to your workflow and aesthetics.</p>
       </div>
 
       <div class="settings-grid">
+        <!-- APPEARANCE GROUP -->
+        <div class="settings-card" style="grid-column: 1 / -1; background: transparent; border: none;">
+          <h3 class="settings-card-title text-accent-cyan" style="border-bottom: var(--border-neon); padding-bottom: 8px; margin-bottom: 0;">Appearance</h3>
+        </div>
+
         <div class="settings-card">
           <h3 class="settings-card-title text-accent-cyan">Aesthetic Themes</h3>
-          <p class="settings-card-desc">Modify the global visual engine and typography layers of the Aether platform. Persisted locally.</p>
+          <p class="settings-card-desc">Modify the global visual engine and typography layers.</p>
           <div class="theme-selectors-grid">
-            <button class="btn-console theme-select-btn active" data-theme="default">CYBERPUNK DEFAULT</button>
-            <button class="btn-console theme-select-btn" data-theme="vaporwave">VAPORWAVE MAGENTA</button>
-            <button class="btn-console theme-select-btn" data-theme="crt">RETRO CRT AMBER</button>
-            <button class="btn-console theme-select-btn" data-theme="mono">MONOCHROME STARK</button>
+            <button class="btn-console theme-select-btn active" data-theme="default">CYBERPUNK</button>
+            <button class="btn-console theme-select-btn" data-theme="vaporwave">VAPORWAVE</button>
+            <button class="btn-console theme-select-btn" data-theme="crt">CRT AMBER</button>
+            <button class="btn-console theme-select-btn" data-theme="mono">MONOCHROME</button>
+            <button class="btn-console theme-select-btn" data-theme="dracula">DRACULA</button>
+            <button class="btn-console theme-select-btn" data-theme="solarized">SOLARIZED</button>
+            <button class="btn-console theme-select-btn" data-theme="synthwave">SYNTHWAVE</button>
           </div>
         </div>
 
         <div class="settings-card">
-          <h3 class="settings-card-title text-accent-cyan">Export & Backup</h3>
-          <p class="settings-card-desc">Download your entire schedule schema and completion history to a JSON file. Store backups securely.</p>
+          <h3 class="settings-card-title text-accent-cyan">Interface Layout</h3>
+          <p class="settings-card-desc">Adjust UI density and spacing to fit your screen size.</p>
+          <div class="theme-selectors-grid">
+            <button class="btn-console theme-select-btn" data-layout="compact">COMPACT</button>
+            <button class="btn-console theme-select-btn active" data-layout="standard">STANDARD</button>
+            <button class="btn-console theme-select-btn" data-layout="spacious">SPACIOUS</button>
+          </div>
+        </div>
+
+        <!-- DATA MANAGEMENT GROUP -->
+        <div class="settings-card" style="grid-column: 1 / -1; background: transparent; border: none; margin-top: 16px;">
+          <h3 class="settings-card-title text-accent-green" style="border-bottom: var(--border-neon); padding-bottom: 8px; margin-bottom: 0;">Data Management</h3>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-card-title text-accent-green">Export & Backup</h3>
+          <p class="settings-card-desc">Download your entire schedule schema and completion history to a JSON file.</p>
           <button class="btn-console" id="btn-export-json">DOWNLOAD BACKUP JSON</button>
         </div>
 
         <div class="settings-card">
           <h3 class="settings-card-title text-accent-green">Import & Restore</h3>
-          <p class="settings-card-desc">Upload a valid Aether Routine JSON schema. It validates conflicts and restores your schedule state.</p>
-          
+          <p class="settings-card-desc">Upload a valid Aether Routine JSON schema to restore state.</p>
           <div class="file-upload-wrapper">
             <input type="file" id="import-file-input" accept=".json" class="hidden-file-input">
-            <button class="btn-console border-neon-cyan" id="btn-trigger-upload">UPLOAD & OVERWRITE</button>
+            <button class="btn-console border-neon-green" id="btn-trigger-upload">UPLOAD & OVERWRITE</button>
           </div>
-          <p class="import-status-text text-accent-pink" id="import-status-label"></p>
+          <p class="import-status-text" id="import-status-label"></p>
+        </div>
+
+        <!-- ADVANCED GROUP -->
+        <div class="settings-card" style="grid-column: 1 / -1; background: transparent; border: none; margin-top: 16px;">
+          <h3 class="settings-card-title text-accent-pink" style="border-bottom: var(--border-neon); padding-bottom: 8px; margin-bottom: 0;">Advanced / Danger Zone</h3>
         </div>
 
         <div class="settings-card">
           <h3 class="settings-card-title text-accent-orange">Factory Mock Load</h3>
-          <p class="settings-card-desc">Reset the current LocalStorage database and fill with highly structured university-schedule dummy data to inspect conflict checks.</p>
+          <p class="settings-card-desc">Reset the database and fill with highly structured dummy data to test.</p>
           <button class="btn-console border-neon-orange" id="btn-restore-mock">LOAD DUMMY DATA</button>
         </div>
 
         <div class="settings-card">
           <h3 class="settings-card-title text-accent-pink">Hard Database Reset</h3>
-          <p class="settings-card-desc">Irreversibly erase all routines and completion logs from this browser instance. Be careful.</p>
+          <p class="settings-card-desc">Irreversibly erase all routines and completion logs. Be careful.</p>
           <button class="btn-console bg-neon-pink" id="btn-clear-database">WIPE DATABASE</button>
         </div>
       </div>

@@ -3,7 +3,7 @@
  */
 import { getStorageState, saveStorageState, exportStateToFile, importStateFromString, resetStateToMock, clearAllState, getDailyNote, saveDailyNote, syncChannel } from './storage.js';
 import { optimizeAllSchedules } from './scheduler.js';
-import { renderTimeline, renderMatrix, renderStreaks, renderTopBarStats, renderYearGrid } from './ui.js';
+import { renderTimeline, initThemeEngine, initLayoutEngine, renderMatrix, renderStreaks, renderTopBarStats, renderYearGrid } from './ui.js';
 import { playClick, playChime, playSweep, toggleMute, isMuted } from './audio.js';
 
 // App State
@@ -27,6 +27,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   registerServiceWorker();
 
   // Populate target hour dropdown options (0 to 23)
+  initThemeEngine();
+  initLayoutEngine();
   populateHourDropdowns();
 
   // Load initial state asynchronously from IndexedDB (with migration)
@@ -222,16 +224,30 @@ function handleCalendarDayClick(dateStr, dow) {
       const isDone = completions.includes(rt.id);
       const color = { Academics: '#00f0ff', Health: '#00ff88', Work: '#ff9500', Leisure: '#ff6b8b' }[rt.category] || '#00f0ff';
 
-      const row = document.createElement('label');
-      row.className = `day-edit-row${isDone ? ' done' : ''}`;
-      row.style.setProperty('--accent-color', color);
+      const row = document.createElement("label");
+      row.className = `day-edit-row${isDone ? " done" : ""}`;
+      row.style.setProperty("--accent-color", color);
       row.innerHTML = `
         <span class="day-edit-color-dot" style="background:${color}; box-shadow: 0 0 8px ${color}"></span>
-        <span class="day-edit-name">${escapeForDisplay(rt.name)}</span>
-        <span class="day-edit-meta">${rt.category} · ${rt.targetHour.toString().padStart(2,'0')}:00</span>
-        <input type="checkbox" class="day-edit-checkbox" data-id="${rt.id}" ${isDone ? 'checked' : ''} aria-label="Toggle ${escapeForDisplay(rt.name)}">
+        <span class="day-edit-name" style="flex-grow: 1;">${escapeForDisplay(rt.name)}</span>
+        <span class="day-edit-meta">${rt.category} · ${rt.targetHour.toString().padStart(2,"0")}:00</span>
+        <button type="button" class="btn-console border-neon-cyan edit-routine-btn" data-id="${rt.id}" aria-label="Edit ${escapeForDisplay(rt.name)}" style="padding: 4px 8px; font-size: 0.75rem; margin-right: 12px; pointer-events: auto;">EDIT</button>
+        <input type="checkbox" class="day-edit-checkbox" data-id="${rt.id}" ${isDone ? "checked" : ""} aria-label="Toggle ${escapeForDisplay(rt.name)}">
         <span class="day-edit-toggle-track"><span class="day-edit-toggle-thumb"></span></span>
       `;
+
+      // Prevent the EDIT button from toggling the label checkbox
+      const editBtn = row.querySelector(".edit-routine-btn");
+      editBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const routineToEdit = state.routines.find(r => r.id === rt.id);
+        if (routineToEdit) {
+          modal.classList.remove("active");
+          modal.setAttribute("aria-hidden", "true");
+          handleOpenEditModal(routineToEdit);
+        }
+      });
 
       // Toggle handler — saves immediately
       const checkbox = row.querySelector('.day-edit-checkbox');

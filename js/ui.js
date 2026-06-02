@@ -722,3 +722,34 @@ export function initThemeEngine() {
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', initThemeEngine);
 }
+
+function applyLayout(layoutName) {
+  const body = document.body;
+  body.classList.remove('layout-compact', 'layout-standard', 'layout-spacious');
+  if (layoutName && layoutName !== 'standard') {
+    body.classList.add(`layout-${layoutName}`);
+  } else {
+    body.classList.add('layout-standard');
+  }
+  document.querySelectorAll('[data-layout]').forEach(btn => {
+    if (btn.getAttribute('data-layout') === layoutName) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+}
+
+export function initLayoutEngine() {
+  const storedLayout = localStorage.getItem('aether_layout') || 'standard';
+  applyLayout(storedLayout);
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-layout]');
+    if (btn) {
+      const selected = btn.getAttribute('data-layout');
+      applyLayout(selected);
+      localStorage.setItem('aether_layout', selected);
+      try { playClick(); } catch (err) {}
+    }
+  });
+}

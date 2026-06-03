@@ -1,0 +1,3 @@
+## 2023-10-27 - O(N^2) loops inside rendering loop
+**Learning:** Using `Array.some` or `Array.filter` inside of loops across large time horizons (like 30-day grids or streak checks looking backward 365 days) causes O(N^2) bottlenecks when resolving completions to active routines, slowing down the frontend render cycles significantly in complex state configurations.
+**Action:** Use an O(1) `Set` cache of active IDs outside the loop for fast membership tests, and pre-aggregate scheduled items using Array buckets rather than re-filtering on every iteration.

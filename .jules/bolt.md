@@ -1,0 +1,3 @@
+## 2026-06-04 - [Avoid Redundant Computation in Array Sorting]
+**Learning:** Using an expensive function like `calculateStreak` inside a `.sort()` comparator results in O(N log N) redundant executions because the comparator is called multiple times for the same elements.
+**Action:** Next time you need to sort an array based on an expensive calculation, use a Schwartzian transform (map first to pre-calculate, then sort, then map back/iterate) to ensure the expensive function is called exactly N times.

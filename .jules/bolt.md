@@ -1,0 +1,3 @@
+## 2025-10-24 - Pre-calculate before Sorting (Schwartzian Transform)
+**Learning:** Calling expensive functions like `calculateStreak` (which iterates over a history dataset) inside a `.sort()` callback results in redundant computations since the sort function performs $O(N \log N)$ comparisons. In this app, `calculateStreak` was called multiple times for each element during the sorting phase.
+**Action:** Use a Schwartzian transform pattern: map the array to include pre-calculated expensive values, sort the mapped array based on these values, and then extract the desired results. This reduces complexity from $O(N \log N)$ expensive calls to exactly $O(N)$ calls.

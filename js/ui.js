@@ -259,6 +259,7 @@ export function renderMatrix(day, state, onEditClick) {
  */
 export function renderStreaks(state) {
   const todayStr = new Date().toISOString().split('T')[0];
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
   
   // 1. Top Core Analytics
   const statsTotal = document.getElementById('stats-total-routines');
@@ -291,7 +292,8 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
+    // ⚡ Bolt: Use O(1) Set lookup instead of O(N) array scan
+    const validCompletions = completedIds.filter(id => validRoutineIds.has(id));
     totalCompletedSlots += validCompletions.length;
   }
 
@@ -309,7 +311,8 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+    // ⚡ Bolt: Use O(1) Set lookup instead of O(N) array scan
+    const completed = (state.completions[dateStr] || []).filter(id => validRoutineIds.has(id));
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
@@ -388,10 +391,12 @@ export function renderStreaks(state) {
 export function renderTopBarStats(state) {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayDay = new Date().getDay();
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
 
   // 1. Calculate Daily Progress Bar
   const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => state.routines.some(r => r.id === id));
+  // ⚡ Bolt: Use O(1) Set lookup instead of O(N) array scan
+  const completedToday = (state.completions[todayStr] || []).filter(id => validRoutineIds.has(id));
 
   const countScheduled = todayRoutines.length;
   const countCompleted = completedToday.length;
@@ -438,7 +443,8 @@ export function renderTopBarStats(state) {
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
+    // ⚡ Bolt: Use O(1) Set lookup instead of O(N) array scan
+    const validComps = completedOnDay.filter(id => validRoutineIds.has(id));
     const dayOfWeek = checkDate.getDay();
     const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 

@@ -24,12 +24,24 @@ export function getBlockForHour(hour) {
   return 'night';
 }
 
+// Pre-calculate fixed integer hours for the circadian energy curve to avoid expensive Math.sin calls
+// during the high-frequency evaluateFitness genetic algorithm loops.
+const ENERGY_CAPACITY_CACHE = new Float64Array(24);
+for (let i = 0; i < 24; i++) {
+  const capacity = 7.5 + 3.0 * Math.sin((2 * Math.PI * (i - 6)) / 24) + 1.8 * Math.sin((4 * Math.PI * (i - 9)) / 24);
+  ENERGY_CAPACITY_CACHE[i] = Math.max(2.0, Math.min(12.0, capacity));
+}
+
 /**
  * Advanced circadian energy curve representing a multi-peak university/work student profile.
  * C(t) = 7.5 + 3.0 * sin(2 * pi * (t - 6) / 24) + 1.8 * sin(4 * pi * (t - 9) / 24)
  * Returns values between 2.0 and 12.0 representing hourly energy capacity.
  */
 export function getEnergyCapacity(hour) {
+  // Use pre-calculated O(1) cache for integer hours (used heavily in GA loops)
+  if (Number.isInteger(hour) && hour >= 0 && hour < 24) {
+    return ENERGY_CAPACITY_CACHE[hour];
+  }
   const t = hour;
   const capacity = 7.5 + 3.0 * Math.sin((2 * Math.PI * (t - 6)) / 24) + 1.8 * Math.sin((4 * Math.PI * (t - 9)) / 24);
   return Math.max(2.0, Math.min(12.0, capacity));
@@ -466,26 +478,34 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
     }
     
     // 2. Circadian Energy Capacity check
-    for (let hour = 0; hour < 24; hour++) {
-      let energyDemand = 0;
-      const hourStartMin = hour * 60;
-      const hourEndMin = (hour + 1) * 60;
+    const energyDemands = new Float64Array(24);
+
+    for (let i = 0; i < sortedIndices.length; i++) {
+      const idx = sortedIndices[i];
+      const r = routines[idx];
+      const targetHour = chromosome[idx];
+      const startMin = targetHour * 60;
+      const endMin = startMin + r.duration;
       
-      for (let i = 0; i < sortedIndices.length; i++) {
-        const idx = sortedIndices[i];
-        const r = routines[idx];
-        const targetHour = chromosome[idx];
-        const startMin = targetHour * 60;
-        const endMin = startMin + r.duration;
-        const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+      const startH = Math.floor(startMin / 60);
+      const endH = Math.ceil(endMin / 60);
+
+      for (let hour = startH; hour < Math.min(24, endH); hour++) {
+        const hourStartMin = hour * 60;
+        const hourEndMin = (hour + 1) * 60;
+        const overlap = Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin);
         if (overlap > 0) {
-          energyDemand += r.energy * (overlap / 60);
+          energyDemands[hour] += r.energy * (overlap / 60);
         }
       }
-      
-      const capacity = getEnergyCapacity(hour);
-      if (energyDemand > capacity) {
-        score -= (energyDemand - capacity) * 150;
+    }
+
+    for (let hour = 0; hour < 24; hour++) {
+      if (energyDemands[hour] > 0) {
+        const capacity = getEnergyCapacity(hour);
+        if (energyDemands[hour] > capacity) {
+          score -= (energyDemands[hour] - capacity) * 150;
+        }
       }
     }
     

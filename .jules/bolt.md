@@ -1,0 +1,3 @@
+## 2024-06-25 - Genetic Algorithm Math Caching
+**Learning:** In highly iterative genetic algorithms in JavaScript, repeated evaluation of `Math.sin` for fixed domain inputs (like the 24 integer hours in an energy curve) creates significant CPU overhead, and traversing multi-nested loops un-optimally checking O(24 * N) can severely bottleneck performance.
+**Action:** Always pre-calculate and cache expensive trigonometric curves with bounded domains using `Float64Array` when they will be accessed in the core evaluation loop of a GA, and hoist operations outside inner loops to compute domain boundaries (`startH`, `endH`) to minimize unnecessary iterations.

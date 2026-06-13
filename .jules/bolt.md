@@ -1,0 +1,3 @@
+## 2024-05-24 - O(n log n) bottleneck in sorting with complex comparisons
+**Learning:** Using an expensive computation like `calculateStreak` (which iterates over historical data) directly within `Array.prototype.sort((a,b) => ...)` executes the function $O(n \log n)$ times, causing severe UI lag when there are many items or extensive histories.
+**Action:** Always pre-compute expensive sort keys. Use a Schwartzian transform pattern: map the array to include the computed key alongside the original object, sort the mapped array based on the pre-computed key (now $O(1)$ comparisons), and then map back or iterate directly over the augmented array.

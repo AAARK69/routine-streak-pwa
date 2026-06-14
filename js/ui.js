@@ -345,15 +345,18 @@ export function renderStreaks(state) {
 
   const streakFragment = document.createDocumentFragment();
 
-  // Sort routines by priority / streak
-  const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
-    return sB.currentStreak - sA.currentStreak;
+  // Sort routines by priority / streak (optimized with pre-calculation to avoid O(N log N) calculateStreak calls)
+  const routinesWithStreaks = state.routines.map(rt => {
+    return { rt, streakData: calculateStreak(rt, state.completions, todayStr) };
   });
 
-  sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+  const sortedRoutines = routinesWithStreaks.sort((a, b) => {
+    return b.streakData.currentStreak - a.streakData.currentStreak;
+  });
+
+  sortedRoutines.forEach(item => {
+    const { rt, streakData } = item;
+    const { currentStreak, maxStreak } = streakData;
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');

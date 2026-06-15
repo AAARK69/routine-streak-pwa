@@ -345,15 +345,22 @@ export function renderStreaks(state) {
 
   const streakFragment = document.createDocumentFragment();
 
-  // Sort routines by priority / streak
-  const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
-    return sB.currentStreak - sA.currentStreak;
-  });
+  // ⚡ Bolt: Optimized redundant calculateStreak calls
+  // What: Used a Schwartzian transform to map routines to their calculated streaks before sorting.
+  // Why: calculateStreak is an expensive operation. Calling it inside .sort() resulted in O(n log n)
+  // redundant recalculations, and another O(n) in the forEach loop.
+  // Impact: Reduces calculateStreak calls from O(n log n) + O(n) down to exactly O(n).
+  const routinesWithStreaks = state.routines.map(rt => ({
+    routine: rt,
+    streakData: calculateStreak(rt, state.completions, todayStr)
+  }));
 
-  sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+  // Sort routines by streak descending
+  routinesWithStreaks.sort((a, b) => b.streakData.currentStreak - a.streakData.currentStreak);
+
+  routinesWithStreaks.forEach(item => {
+    const rt = item.routine;
+    const { currentStreak, maxStreak } = item.streakData;
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');

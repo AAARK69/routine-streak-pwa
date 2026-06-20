@@ -1,0 +1,3 @@
+## 2024-06-20 - Schwartzian Transform for Expensive Sorts
+**Learning:** The `calculateStreak` function is an expensive O(M) operation (where M is days in history) that was being called repeatedly inside an `Array.prototype.sort` comparator in `js/ui.js`. `sort` evaluates the comparator O(N log N) times, causing an explosion of redundant calls for UI rendering.
+**Action:** When sorting arrays based on an expensive calculation, always pre-calculate the values using a Schwartzian Transform (Map-Sort-Map): first `map` to an array of objects containing the original item and the calculated value, then `sort` based on the pre-calculated value, and finally `map` back to the required structure. This reduces expensive function calls from O(N log N) to O(N).

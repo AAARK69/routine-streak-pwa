@@ -259,6 +259,7 @@ export function renderMatrix(day, state, onEditClick) {
  */
 export function renderStreaks(state) {
   const todayStr = new Date().toISOString().split('T')[0];
+  const activeRoutineIds = new Set(state.routines.map(r => r.id));
   
   // 1. Top Core Analytics
   const statsTotal = document.getElementById('stats-total-routines');
@@ -273,11 +274,14 @@ export function renderStreaks(state) {
   });
   statsCompletions.textContent = totalLoggedCompletions;
 
-  // Calculate yield percentage of completed items over scheduled days
+  // 2. Combined 30-Day Activity Heatmap & Yield Calculation
+  const heatmapGrid = document.getElementById('streak-heatmap-grid');
+  const heatmapFragment = document.createDocumentFragment();
+
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
-  
   const today = new Date();
+
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
@@ -285,35 +289,20 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     // How many scheduled on this day
-    const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
-    totalScheduledSlots += scheduledRoutines.length;
-
-    // How many completed on this day
-    const completedIds = state.completions[dateStr] || [];
-    // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
-    totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
-
-  // 2. Renders 30-Day Activity Grid Heatmap
-  const heatmapGrid = document.getElementById('streak-heatmap-grid');
-  const heatmapFragment = document.createDocumentFragment();
-
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
-
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+    const scheduledCount = scheduled.length;
+    totalScheduledSlots += scheduledCount;
 
+    // How many completed on this day (only count valid routines)
+    const completedIds = state.completions[dateStr] || [];
+    const completed = completedIds.filter(id => activeRoutineIds.has(id));
+    const completedCount = completed.length;
+    totalCompletedSlots += completedCount;
+
+    // Render heatmap cell
     let intensity = 0; // default empty
-    if (scheduled.length > 0) {
-      const pct = completed.length / scheduled.length;
+    if (scheduledCount > 0) {
+      const pct = completedCount / scheduledCount;
       if (pct === 0) intensity = 0;
       else if (pct < 0.4) intensity = 1;
       else if (pct < 0.8) intensity = 2;
@@ -325,10 +314,14 @@ export function renderStreaks(state) {
     
     // Simple native tooltip description
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
+    cell.title = `${formattedDate}: Completed ${completedCount}/${scheduledCount} (${Math.round((scheduledCount > 0 ? completedCount/scheduledCount : 0)*100)}%)`;
 
     heatmapFragment.appendChild(cell);
   }
+
+  // Update yield percentage
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);
@@ -388,10 +381,11 @@ export function renderStreaks(state) {
 export function renderTopBarStats(state) {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayDay = new Date().getDay();
+  const activeRoutineIds = new Set(state.routines.map(r => r.id));
 
   // 1. Calculate Daily Progress Bar
   const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => state.routines.some(r => r.id === id));
+  const completedToday = (state.completions[todayStr] || []).filter(id => activeRoutineIds.has(id));
 
   const countScheduled = todayRoutines.length;
   const countCompleted = completedToday.length;
@@ -438,7 +432,7 @@ export function renderTopBarStats(state) {
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
+    const validComps = completedOnDay.filter(id => activeRoutineIds.has(id));
     const dayOfWeek = checkDate.getDay();
     const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 

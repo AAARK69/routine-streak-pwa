@@ -277,6 +277,8 @@ export function renderStreaks(state) {
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
   
+  const routineIds = new Set(state.routines.map(r => r.id));
+
   const today = new Date();
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
@@ -291,7 +293,7 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
+    const validCompletions = completedIds.filter(id => routineIds.has(id));
     totalCompletedSlots += validCompletions.length;
   }
 
@@ -309,7 +311,7 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+    const completed = (state.completions[dateStr] || []).filter(id => routineIds.has(id));
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
@@ -345,15 +347,21 @@ export function renderStreaks(state) {
 
   const streakFragment = document.createDocumentFragment();
 
+  // OPTIMIZATION: Pre-compute streaks to avoid O(n log n) recalculations during sort
+  const streakCache = new Map();
+  state.routines.forEach(rt => {
+    streakCache.set(rt.id, calculateStreak(rt, state.completions, todayStr));
+  });
+
   // Sort routines by priority / streak
   const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
+    const sA = streakCache.get(a.id);
+    const sB = streakCache.get(b.id);
     return sB.currentStreak - sA.currentStreak;
   });
 
   sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+    const { currentStreak, maxStreak } = streakCache.get(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');
@@ -391,7 +399,11 @@ export function renderTopBarStats(state) {
 
   // 1. Calculate Daily Progress Bar
   const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => state.routines.some(r => r.id === id));
+
+  // OPTIMIZATION: use Set for O(1) lookups
+  const routineIds = new Set(state.routines.map(r => r.id));
+
+  const completedToday = (state.completions[todayStr] || []).filter(id => routineIds.has(id));
 
   const countScheduled = todayRoutines.length;
   const countCompleted = completedToday.length;
@@ -422,6 +434,12 @@ export function renderTopBarStats(state) {
     };
   }
 
+  // PRE-COMPUTE routine schedules for faster inner loop lookups
+  const dayRoutineCounts = [0, 0, 0, 0, 0, 0, 0];
+  state.routines.forEach(r => {
+    r.days.forEach(d => dayRoutineCounts[d]++);
+  });
+
   let globalStreak = 0;
   let checkDate = new Date();
   let streakBroken = false;
@@ -437,19 +455,25 @@ export function renderTopBarStats(state) {
     const checkStr = checkDate.toISOString().split('T')[0];
     const completedOnDay = state.completions[checkStr] || [];
     
-    // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
-    const dayOfWeek = checkDate.getDay();
-    const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
+    let hasValidCompletion = false;
+    for (let i = 0; i < completedOnDay.length; i++) {
+        if (routineIds.has(completedOnDay[i])) {
+            hasValidCompletion = true;
+            break;
+        }
+    }
 
-    if (validComps.length > 0) {
+    const dayOfWeek = checkDate.getDay();
+    const routinesScheduledCount = dayRoutineCounts[dayOfWeek];
+
+    if (hasValidCompletion) {
       globalStreak++;
     } else {
       // If it's today and they have scheduled routines but haven't completed any yet,
       // don't break the streak unless they completed nothing yesterday too.
-      if (isFirstCheck && checkStr === todayStr && routinesScheduled.length > 0) {
+      if (isFirstCheck && checkStr === todayStr && routinesScheduledCount > 0) {
         // Keep checking yesterday
-      } else if (routinesScheduled.length === 0) {
+      } else if (routinesScheduledCount === 0) {
         // If nothing was scheduled, a miss doesn't break the streak
       } else {
         streakBroken = true;

@@ -1,0 +1,3 @@
+## 2024-05-18 - Optimized Array Lookups and Expensive Calculations inside Loops
+**Learning:** In nested loops computing UI arrays, repeatedly calculating expensive fields via array `.filter` coupled with `.some` (an O(N^2) operation per loop) creates severe main thread blocking as datasets grow. Similarly, placing computationally heavy functions like `calculateStreak` directly into the comparison callback of `.sort()` forces recalculation multiple times per item (O(N log N) invocations).
+**Action:** Use a `Set` to hold IDs and replace `.some()` lookups with an O(1) `.has()`. Pre-calculate expensive derived data once, store it in a `Map`, and refer to the `Map` during sorting and map/forEach operations.

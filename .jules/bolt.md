@@ -1,0 +1,3 @@
+## 2024-03-24 - O(N) array filtering and expensive computations inside loops and comparators
+**Learning:** Found a major performance bottleneck where `renderStreaks` and `renderTopBarStats` were repeatedly scanning `state.routines` inside `.filter` and `.some` loops, leading to O(N^2) complexity. Also, calculating streaks inside a `sort` comparator caused the expensive `calculateStreak` to be run multiple times per routine.
+**Action:** Always precompute a `Set` for O(1) lookups when filtering based on ID membership. For sorting, pre-calculate expensive derivations (like streaks) into a mapped array before applying the `.sort()` operation.

@@ -278,6 +278,8 @@ export function renderStreaks(state) {
   let totalCompletedSlots = 0;
   
   const today = new Date();
+  const validRoutineMap = new Set(state.routines.map(r => r.id));
+
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
@@ -291,7 +293,7 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
+    const validCompletions = completedIds.filter(id => validRoutineMap.has(id));
     totalCompletedSlots += validCompletions.length;
   }
 
@@ -309,7 +311,7 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+    const completed = (state.completions[dateStr] || []).filter(id => validRoutineMap.has(id));
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
@@ -346,14 +348,20 @@ export function renderStreaks(state) {
   const streakFragment = document.createDocumentFragment();
 
   // Sort routines by priority / streak
-  const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
-    return sB.currentStreak - sA.currentStreak;
+  // Pre-calculate streaks to avoid expensive recalculations in sort comparator
+  const routineStreaks = state.routines.map(rt => {
+    return {
+      rt,
+      ...calculateStreak(rt, state.completions, todayStr)
+    };
   });
 
-  sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+  routineStreaks.sort((a, b) => {
+    return b.currentStreak - a.currentStreak;
+  });
+
+  routineStreaks.forEach(item => {
+    const { rt, currentStreak, maxStreak } = item;
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');
@@ -390,8 +398,9 @@ export function renderTopBarStats(state) {
   const todayDay = new Date().getDay();
 
   // 1. Calculate Daily Progress Bar
+  const validRoutineMap = new Set(state.routines.map(r => r.id));
   const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => state.routines.some(r => r.id === id));
+  const completedToday = (state.completions[todayStr] || []).filter(id => validRoutineMap.has(id));
 
   const countScheduled = todayRoutines.length;
   const countCompleted = completedToday.length;
@@ -438,7 +447,7 @@ export function renderTopBarStats(state) {
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
+    const validComps = completedOnDay.filter(id => validRoutineMap.has(id));
     const dayOfWeek = checkDate.getDay();
     const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 

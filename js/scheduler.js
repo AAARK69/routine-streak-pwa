@@ -156,7 +156,8 @@ export function checkConflictsForDay(dayOfWeek, routines) {
     for (let j = i + 1; j < sorted.length; j++) {
       const r2 = sorted[j];
       const start2 = r2.targetHour * 60;
-      const end2 = start2 + r2.duration;
+      if (start2 >= end1) break;
+        const end2 = start2 + r2.duration;
 
       // Check overlap
       if (start1 < end2 && start2 < end1) {
@@ -227,7 +228,8 @@ export function checkConflictsForDay(dayOfWeek, routines) {
     for (let j = i + 1; j < sorted.length; j++) {
       const r2 = sorted[j];
       const start2 = r2.targetHour * 60;
-      const end2 = start2 + r2.duration;
+      if (start2 >= end1) break;
+        const end2 = start2 + r2.duration;
 
       const gap = start2 - end1;
 
@@ -407,11 +409,16 @@ function hydrate(chromosome, routines) {
  * Globally scores a chromosome schedule mapping across all days (0-6)
  */
 export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRoutineIndices = null) {
+  let cacheKeyToStore = null;
   if (fitnessCache) {
-    const key = chromosome.join(',');
+    let key = "";
+    for(let i=0; i<chromosome.length; i++) {
+      key += String.fromCharCode(chromosome[i] + 32);
+    }
     if (fitnessCache[key] !== undefined) {
       return fitnessCache[key];
     }
+    cacheKeyToStore = key;
   }
 
   let score = 0;
@@ -456,6 +463,7 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
         const r2 = routines[idx2];
         const targetHour2 = chromosome[idx2];
         const start2 = targetHour2 * 60;
+        if (start2 >= end1) break;
         const end2 = start2 + r2.duration;
         
         const overlap = Math.max(0, Math.min(end1, end2) - Math.max(start1, start2));
@@ -465,27 +473,33 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
       }
     }
     
-    // 2. Circadian Energy Capacity check
-    for (let hour = 0; hour < 24; hour++) {
-      let energyDemand = 0;
-      const hourStartMin = hour * 60;
-      const hourEndMin = (hour + 1) * 60;
+    // 2. Circadian Energy Capacity check (Optimized)
+    const hourlyDemand = new Float64Array(24);
+    for (let i = 0; i < sortedIndices.length; i++) {
+      const idx = sortedIndices[i];
+      const r = routines[idx];
+      const targetHour = chromosome[idx];
+      const startMin = targetHour * 60;
+      const endMin = startMin + r.duration;
       
-      for (let i = 0; i < sortedIndices.length; i++) {
-        const idx = sortedIndices[i];
-        const r = routines[idx];
-        const targetHour = chromosome[idx];
-        const startMin = targetHour * 60;
-        const endMin = startMin + r.duration;
-        const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
-        if (overlap > 0) {
-          energyDemand += r.energy * (overlap / 60);
-        }
+      let startH = Math.floor(startMin / 60);
+      let endH = Math.floor((endMin - 1) / 60);
+      
+      for (let h = startH; h <= endH; h++) {
+        if (h >= 24) continue;
+        const hourStartMin = h * 60;
+        const hourEndMin = (h + 1) * 60;
+        const overlap = Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin);
+        hourlyDemand[h] += r.energy * (overlap / 60);
       }
-      
-      const capacity = getEnergyCapacity(hour);
-      if (energyDemand > capacity) {
-        score -= (energyDemand - capacity) * 150;
+    }
+
+    for (let hour = 0; hour < 24; hour++) {
+      if (hourlyDemand[hour] > 0) {
+        const capacity = getEnergyCapacity(hour);
+        if (hourlyDemand[hour] > capacity) {
+          score -= (hourlyDemand[hour] - capacity) * 150;
+        }
       }
     }
     
@@ -530,9 +544,8 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
     }
   }
   
-  if (fitnessCache) {
-    const key = chromosome.join(',');
-    fitnessCache[key] = score;
+  if (fitnessCache && cacheKeyToStore !== null) {
+    fitnessCache[cacheKeyToStore] = score;
   }
   
   return score;

@@ -278,6 +278,9 @@ export function renderStreaks(state) {
   let totalCompletedSlots = 0;
   
   const today = new Date();
+  // ⚡ Bolt: Cache valid routine IDs in an O(1) Set to avoid repetitive O(N) array loops
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
+
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
@@ -291,7 +294,7 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
+    const validCompletions = completedIds.filter(id => validRoutineIds.has(id));
     totalCompletedSlots += validCompletions.length;
   }
 
@@ -309,7 +312,7 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+    const completed = (state.completions[dateStr] || []).filter(id => validRoutineIds.has(id));
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
@@ -389,9 +392,12 @@ export function renderTopBarStats(state) {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayDay = new Date().getDay();
 
+  // ⚡ Bolt: Cache valid routine IDs in an O(1) Set to avoid repetitive O(N) array loops
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
+
   // 1. Calculate Daily Progress Bar
   const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => state.routines.some(r => r.id === id));
+  const completedToday = (state.completions[todayStr] || []).filter(id => validRoutineIds.has(id));
 
   const countScheduled = todayRoutines.length;
   const countCompleted = completedToday.length;
@@ -438,7 +444,7 @@ export function renderTopBarStats(state) {
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
+    const validComps = completedOnDay.filter(id => validRoutineIds.has(id));
     const dayOfWeek = checkDate.getDay();
     const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 
@@ -526,6 +532,18 @@ export function renderYearGrid(state, onDayClick = null) {
   // Sort routines consistently for day-cells as well!
   const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
 
+  // ⚡ Bolt: Precompute routines grouped by day-of-week for O(1) checks in the 365-day loop
+  const routinesByDow = Array.from({ length: 7 }, () => []);
+  sortedRoutinesForCells.forEach(rt => {
+    rt.days.forEach(dow => routinesByDow[dow].push(rt));
+  });
+
+  // ⚡ Bolt: Precompute Sets of completions for O(1) lookups instead of iterating array `.includes()` per day cell
+  const completionsSet = {};
+  for (const dateStr of Object.keys(state.completions)) {
+    completionsSet[dateStr] = new Set(state.completions[dateStr]);
+  }
+
   const yearFragment = document.createDocumentFragment();
 
   MONTHS.forEach((month, mIndex) => {
@@ -563,6 +581,8 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
+        const completionsOnDate = completionsSet[dateStr] || new Set();
+
         sortedRoutinesForCells.forEach(rt => {
           const isScheduled = rt.days.includes(dow);
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
@@ -574,8 +594,7 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = state.completions[dateStr] || [];
-              const isDone = completionsOnDate.includes(rt.id);
+              const isDone = completionsOnDate.has(rt.id);
               if (isDone) {
                 statusClass = 'active-completed';
                 completedAtLeastOne = true;
@@ -598,7 +617,7 @@ export function renderYearGrid(state, onDayClick = null) {
       }
 
       const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
+      const hasRoutinesOnDay = routinesByDow[dow].length > 0;
       const isClickable = !isFutureCell || hasRoutinesOnDay;
 
       daysHtml += `

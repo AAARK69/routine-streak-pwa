@@ -1,0 +1,3 @@
+## 2025-02-12 - Prevent Repeated Array Iteration Inside UI Loops
+**Learning:** The application heavily iterates over \`state.routines\` and \`state.completions\` during UI rendering loops (e.g., in \`js/ui.js\`). Calling \`state.routines.some(r => r.id === id)\` inside the deep nested loops (like 30-day lookbacks and historical calendar building) causes severe O(N*M) performance bottlenecks and blocks the UI thread for long periods of time.
+**Action:** When evaluating active states inside these deep loops, always map arrays into O(1) \`Set\` objects (e.g., \`const validRoutineIds = new Set(state.routines.map(r => r.id));\`) beforehand to prevent UI thread blocking from repeating O(N) array methods.

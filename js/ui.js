@@ -273,6 +273,9 @@ export function renderStreaks(state) {
   });
   statsCompletions.textContent = totalLoggedCompletions;
 
+  // Cache valid routine IDs to O(1) set to prevent inner loop O(N) evaluations
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
+
   // Calculate yield percentage of completed items over scheduled days
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
@@ -291,7 +294,7 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
+    const validCompletions = completedIds.filter(id => validRoutineIds.has(id));
     totalCompletedSlots += validCompletions.length;
   }
 
@@ -309,7 +312,7 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+    const completed = (state.completions[dateStr] || []).filter(id => validRoutineIds.has(id));
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
@@ -389,9 +392,12 @@ export function renderTopBarStats(state) {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayDay = new Date().getDay();
 
+  // Cache valid routine IDs to O(1) set to prevent inner loop O(N) evaluations
+  const validRoutineIds = new Set(state.routines.map(r => r.id));
+
   // 1. Calculate Daily Progress Bar
   const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => state.routines.some(r => r.id === id));
+  const completedToday = (state.completions[todayStr] || []).filter(id => validRoutineIds.has(id));
 
   const countScheduled = todayRoutines.length;
   const countCompleted = completedToday.length;
@@ -438,7 +444,7 @@ export function renderTopBarStats(state) {
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
+    const validComps = completedOnDay.filter(id => validRoutineIds.has(id));
     const dayOfWeek = checkDate.getDay();
     const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 

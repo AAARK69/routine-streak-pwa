@@ -1,0 +1,3 @@
+## 2024-05-18 - Deep Array Scan Inside UI Loop Blocking
+**Learning:** In applications mapping over data to generate UI components, using `Array.prototype.some` inside outer mapping routines to evaluate active state can severely impact performance as complexity grows exponentially (`O(N * M)`).
+**Action:** When filtering or counting active occurrences of domain objects from a larger pool across arrays inside loops, immediately map the pool identifiers into an `O(1)` `Set` representation (`new Set(entities.map(...))`) at the top scope of the render cycle. Furthermore, repeatedly parsing string-based configurations should be evaluated and cached.

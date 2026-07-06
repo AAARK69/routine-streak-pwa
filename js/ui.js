@@ -260,6 +260,9 @@ export function renderMatrix(day, state, onEditClick) {
 export function renderStreaks(state) {
   const todayStr = new Date().toISOString().split('T')[0];
   
+  // ⚡ Bolt Optimization: Map routines to a Set for O(1) lookups inside deep loops
+  const activeIds = new Set(state.routines.map(r => r.id));
+
   // 1. Top Core Analytics
   const statsTotal = document.getElementById('stats-total-routines');
   const statsCompletions = document.getElementById('stats-total-completions');
@@ -291,7 +294,7 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => state.routines.some(r => r.id === id));
+    const validCompletions = completedIds.filter(id => activeIds.has(id));
     totalCompletedSlots += validCompletions.length;
   }
 
@@ -309,7 +312,7 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => state.routines.some(r => r.id === id));
+    const completed = (state.completions[dateStr] || []).filter(id => activeIds.has(id));
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
@@ -345,15 +348,24 @@ export function renderStreaks(state) {
 
   const streakFragment = document.createDocumentFragment();
 
+  // ⚡ Bolt Optimization: Cache streak calculation during sort to prevent redundant O(N) evaluations
+  const streakCache = new Map();
+  const getStreak = (rt) => {
+    if (!streakCache.has(rt.id)) {
+      streakCache.set(rt.id, calculateStreak(rt, state.completions, todayStr));
+    }
+    return streakCache.get(rt.id);
+  };
+
   // Sort routines by priority / streak
   const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
+    const sA = getStreak(a);
+    const sB = getStreak(b);
     return sB.currentStreak - sA.currentStreak;
   });
 
   sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+    const { currentStreak, maxStreak } = getStreak(rt);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');
@@ -389,9 +401,12 @@ export function renderTopBarStats(state) {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayDay = new Date().getDay();
 
+  // ⚡ Bolt Optimization: Map routines to a Set for O(1) lookups
+  const activeIds = new Set(state.routines.map(r => r.id));
+
   // 1. Calculate Daily Progress Bar
   const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => state.routines.some(r => r.id === id));
+  const completedToday = (state.completions[todayStr] || []).filter(id => activeIds.has(id));
 
   const countScheduled = todayRoutines.length;
   const countCompleted = completedToday.length;
@@ -438,7 +453,7 @@ export function renderTopBarStats(state) {
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => state.routines.some(r => r.id === id));
+    const validComps = completedOnDay.filter(id => activeIds.has(id));
     const dayOfWeek = checkDate.getDay();
     const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 
@@ -474,6 +489,16 @@ export function renderTopBarStats(state) {
  * Render 12-Month Themed Annual Calendar grid (Cyberpunk High-Contrast version of user goal sheet)
  */
 export function renderYearGrid(state, onDayClick = null) {
+  // ⚡ Bolt Optimization: Pre-calculate active completions per day into Sets for O(1) inside inner loop
+  const completionsSets = {};
+  for (const d in state.completions) {
+    completionsSets[d] = new Set(state.completions[d]);
+  }
+
+  // ⚡ Bolt Optimization: Cache scheduled days for each routine
+  const routineDaysCache = new Map();
+  state.routines.forEach(rt => routineDaysCache.set(rt.id, new Set(rt.days)));
+
   // 1. Render Columns Decode Legend Key at the top
   const legendList = document.getElementById('calendar-legend-list');
   if (legendList) {
@@ -520,6 +545,7 @@ export function renderYearGrid(state, onDayClick = null) {
 
   const today = new Date();
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayMidnightMs = todayMidnight.getTime();
   
   let annualBlueDays = 0;
   
@@ -551,7 +577,7 @@ export function renderYearGrid(state, onDayClick = null) {
       const dow = cellDate.getDay();
       const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
       
-      const isFuture = cellDate > todayMidnight;
+      const isFuture = cellDate.getTime() > todayMidnightMs;
       
       let subBoxesHtml = '';
 
@@ -563,8 +589,10 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
+        const completionsOnDate = completionsSets[dateStr];
+
         sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
+          const isScheduled = routineDaysCache.get(rt.id).has(dow);
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
           
           let statusClass = 'inactive';
@@ -574,8 +602,7 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = state.completions[dateStr] || [];
-              const isDone = completionsOnDate.includes(rt.id);
+              const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
                 completedAtLeastOne = true;
@@ -597,8 +624,8 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
+      const isFutureCell = isFuture;
+      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => routineDaysCache.get(rt.id).has(dow));
       const isClickable = !isFutureCell || hasRoutinesOnDay;
 
       daysHtml += `

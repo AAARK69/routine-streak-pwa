@@ -63,8 +63,11 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
 
   const fragment = document.createDocumentFragment();
 
+  // Performance Optimization: O(1) Set lookup inside tight loop
+  const todayCompletions = new Set(state.completions[todayStr] || []);
+
   activeRoutines.forEach((rt, index) => {
-    const isCompleted = (state.completions[todayStr] || []).includes(rt.id);
+    const isCompleted = todayCompletions.has(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     // 3. Habit-Stacking Connectors Check
@@ -530,6 +533,12 @@ export function renderYearGrid(state, onDayClick = null) {
 
   const yearFragment = document.createDocumentFragment();
 
+  // Performance Optimization: Map arrays to Sets outside of the O(365 * R) loop
+  const completionsCache = {};
+  for (const [date, ids] of Object.entries(state.completions)) {
+    completionsCache[date] = new Set(ids);
+  }
+
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
     monthCard.className = 'month-card';
@@ -565,6 +574,8 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
+          const completionsOnDate = completionsCache[dateStr] || new Set();
+
         sortedRoutinesForCells.forEach(rt => {
           const isScheduled = rt.days.includes(dow);
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
@@ -576,8 +587,7 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = state.completions[dateStr] || [];
-              const isDone = completionsOnDate.includes(rt.id);
+                const isDone = completionsOnDate.has(rt.id);
               if (isDone) {
                 statusClass = 'active-completed';
                 completedAtLeastOne = true;

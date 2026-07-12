@@ -1,3 +1,6 @@
 ## 2024-05-14 - Map arrays to Set in deep loops
 **Learning:** The application heavily iterates over `state.routines` and `state.completions` during UI rendering loops. When evaluating active states inside these deep loops, always mapping arrays into O(1) `Set` objects beforehand prevents UI thread blocking from repeating O(N) array methods.
 **Action:** Always create `Set` objects for lookups in tight loops, particularly for `id` filtering.
+## 2025-02-12 - Map arrays to Set outside of deep rendering loops
+**Learning:** The previous learning from 2024-05-14 correctly identified mapping arrays to Set objects inside deep loops (e.g. `Array.includes()` replaced with `Set.has()`). However, there was a missed opportunity: performing this instantiation inside the loop, while faster, was sub-optimal. Pre-computing the Set objects *before* entering deeply nested iteration blocks (like $O(365 \times R)$ in `renderYearGrid`) drastically maximizes performance gains by converting $O(N)$ repeated allocations into a one-time $O(M)$ step.
+**Action:** Always extract and pre-compute complex data structures (like Sets and Maps) ahead of nested rendering loops to prevent unnecessary recreation of the data structure.

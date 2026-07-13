@@ -63,8 +63,11 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
 
   const fragment = document.createDocumentFragment();
 
+  // ⚡ Bolt Optimization: Pre-compute Set outside the inner rendering loop
+  const completionsSet = new Set(state.completions[todayStr] || []);
+
   activeRoutines.forEach((rt, index) => {
-    const isCompleted = (state.completions[todayStr] || []).includes(rt.id);
+    const isCompleted = completionsSet.has(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     // 3. Habit-Stacking Connectors Check
@@ -346,15 +349,24 @@ export function renderStreaks(state) {
 
   const streakFragment = document.createDocumentFragment();
 
+  // ⚡ Bolt Optimization: Memoize streak calculations to prevent O(N log N) re-evaluations during sort
+  const streakCache = new Map();
+  const getStreak = (rt) => {
+    if (!streakCache.has(rt.id)) {
+      streakCache.set(rt.id, calculateStreak(rt, state.completions, todayStr));
+    }
+    return streakCache.get(rt.id);
+  };
+
   // Sort routines by priority / streak
   const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
+    const sA = getStreak(a);
+    const sB = getStreak(b);
     return sB.currentStreak - sA.currentStreak;
   });
 
   sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+    const { currentStreak, maxStreak } = getStreak(rt);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');
@@ -565,6 +577,9 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
+        // ⚡ Bolt Optimization: Map O(N) array to O(1) Set outside inner loop
+        const completionsSet = new Set(state.completions[dateStr] || []);
+
         sortedRoutinesForCells.forEach(rt => {
           const isScheduled = rt.days.includes(dow);
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
@@ -576,8 +591,7 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = state.completions[dateStr] || [];
-              const isDone = completionsOnDate.includes(rt.id);
+              const isDone = completionsSet.has(rt.id);
               if (isDone) {
                 statusClass = 'active-completed';
                 completedAtLeastOne = true;

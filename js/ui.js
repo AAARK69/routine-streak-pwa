@@ -347,14 +347,21 @@ export function renderStreaks(state) {
   const streakFragment = document.createDocumentFragment();
 
   // Sort routines by priority / streak
+  // If there's only 1 routine, sorting doesn't execute the comparator, so we must safely handle it
+  // Using a pre-populated cache ensures we handle arrays of length 1 properly (where sort callback is never called)
+  const streakCache = new Map();
+  state.routines.forEach(rt => {
+    streakCache.set(rt.id, calculateStreak(rt, state.completions, todayStr));
+  });
+
   const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
+    const sA = streakCache.get(a.id);
+    const sB = streakCache.get(b.id);
     return sB.currentStreak - sA.currentStreak;
   });
 
   sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+    const { currentStreak, maxStreak } = streakCache.get(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');
@@ -525,8 +532,14 @@ export function renderYearGrid(state, onDayClick = null) {
   
   let annualBlueDays = 0;
   
-  // Sort routines consistently for day-cells as well!
-  const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
+  // Convert state.completions arrays to Sets once for fast O(1) lookup
+  const completionsSets = {};
+  for (const date in state.completions) {
+    completionsSets[date] = new Set(state.completions[date]);
+  }
+
+  // Sort routines consistently for day-cells as well! Convert days array to Set for O(1) lookup.
+  const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id)).map(r => ({...r, daysSet: new Set(r.days)}));
 
   const yearFragment = document.createDocumentFragment();
 
@@ -566,7 +579,7 @@ export function renderYearGrid(state, onDayClick = null) {
         let completedAtLeastOne = false;
 
         sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
+          const isScheduled = rt.daysSet.has(dow);
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
           
           let statusClass = 'inactive';
@@ -576,8 +589,8 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = state.completions[dateStr] || [];
-              const isDone = completionsOnDate.includes(rt.id);
+              const completionsOnDate = completionsSets[dateStr];
+              const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
                 completedAtLeastOne = true;
@@ -600,7 +613,7 @@ export function renderYearGrid(state, onDayClick = null) {
       }
 
       const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
+      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.daysSet.has(dow));
       const isClickable = !isFutureCell || hasRoutinesOnDay;
 
       daysHtml += `

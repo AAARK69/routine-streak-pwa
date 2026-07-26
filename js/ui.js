@@ -347,14 +347,18 @@ export function renderStreaks(state) {
   const streakFragment = document.createDocumentFragment();
 
   // Sort routines by priority / streak
+  // OPTIMIZATION: Memoize expensive calculateStreak calls before sorting
+  const streakCache = new Map();
+  state.routines.forEach(rt => {
+    streakCache.set(rt.id, calculateStreak(rt, state.completions, todayStr));
+  });
+
   const sortedRoutines = [...state.routines].sort((a, b) => {
-    const sA = calculateStreak(a, state.completions, todayStr);
-    const sB = calculateStreak(b, state.completions, todayStr);
-    return sB.currentStreak - sA.currentStreak;
+    return streakCache.get(b.id).currentStreak - streakCache.get(a.id).currentStreak;
   });
 
   sortedRoutines.forEach(rt => {
-    const { currentStreak, maxStreak } = calculateStreak(rt, state.completions, todayStr);
+    const { currentStreak, maxStreak } = streakCache.get(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     const card = document.createElement('div');
@@ -530,6 +534,12 @@ export function renderYearGrid(state, onDayClick = null) {
 
   const yearFragment = document.createDocumentFragment();
 
+  // Pre-map completion arrays to Sets for O(1) lookup inside the deep loop
+  const completionSets = new Map();
+  Object.keys(state.completions).forEach(dateStr => {
+    completionSets.set(dateStr, new Set(state.completions[dateStr]));
+  });
+
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
     monthCard.className = 'month-card';
@@ -576,8 +586,8 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = state.completions[dateStr] || [];
-              const isDone = completionsOnDate.includes(rt.id);
+              const completionsOnDate = completionSets.get(dateStr);
+              const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
                 completedAtLeastOne = true;

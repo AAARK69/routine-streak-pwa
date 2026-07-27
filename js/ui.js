@@ -532,6 +532,15 @@ export function renderYearGrid(state, onDayClick = null) {
   // Sort routines consistently for day-cells as well!
   const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
 
+  // OPTIMIZATION: Pre-calculate active days of week to avoid O(N) .some() check in the deep loop
+  const activeDaysOfWeek = new Set();
+  for (let i = 0; i < sortedRoutinesForCells.length; i++) {
+    const days = sortedRoutinesForCells[i].days;
+    for (let j = 0; j < days.length; j++) {
+      activeDaysOfWeek.add(days[j]);
+    }
+  }
+
   const yearFragment = document.createDocumentFragment();
 
   // Pre-map completion arrays to Sets for O(1) lookup inside the deep loop
@@ -575,7 +584,11 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
-        sortedRoutinesForCells.forEach(rt => {
+        // OPTIMIZATION: Extract completionsOnDate lookup outside the O(N) loop to avoid hitting Map.get N times per day
+        const completionsOnDate = isFuture ? null : completionSets.get(dateStr);
+
+        for (let i = 0; i < sortedRoutinesForCells.length; i++) {
+          const rt = sortedRoutinesForCells[i];
           const isScheduled = rt.days.includes(dow);
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
           
@@ -586,7 +599,6 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
               const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
@@ -598,7 +610,7 @@ export function renderYearGrid(state, onDayClick = null) {
           }
 
           subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+        }
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -610,7 +622,7 @@ export function renderYearGrid(state, onDayClick = null) {
       }
 
       const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
+      const hasRoutinesOnDay = activeDaysOfWeek.has(dow);
       const isClickable = !isFutureCell || hasRoutinesOnDay;
 
       daysHtml += `

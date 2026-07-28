@@ -434,33 +434,51 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
       sortedIndices = dayRoutines.map(dr => routines.findIndex(r => r.id === dr.id));
     }
     
-    // 1. Preferred Block Score & Overlaps
-    for (let i = 0; i < sortedIndices.length; i++) {
-      const idx1 = sortedIndices[i];
-      const r1 = routines[idx1];
-      const targetHour1 = chromosome[idx1];
-      const start1 = targetHour1 * 60;
-      const end1 = start1 + r1.duration;
-      
-      const block = getBlockForHour(targetHour1);
-      if (block === r1.preferredBlock) {
-        score += 30;
-      } else if (ADJACENT_BLOCKS[r1.preferredBlock]?.includes(block)) {
-        score += 10;
-      } else {
-        score -= 20;
-      }
-      
-      for (let j = i + 1; j < sortedIndices.length; j++) {
-        const idx2 = sortedIndices[j];
-        const r2 = routines[idx2];
-        const targetHour2 = chromosome[idx2];
-        const start2 = targetHour2 * 60;
-        const end2 = start2 + r2.duration;
+    const len = sortedIndices.length;
+
+    const starts = new Int32Array(len);
+    const ends = new Int32Array(len);
+    const energies = new Float32Array(len);
+    const conflictGroups = new Array(len);
+
+    for (let i = 0; i < len; i++) {
+        const idx = sortedIndices[i];
+        const r = routines[idx];
+        const targetHour = chromosome[idx];
+        starts[i] = targetHour * 60;
+        ends[i] = starts[i] + r.duration;
+        energies[i] = r.energy;
+        conflictGroups[i] = r.conflictGroup;
+
+        let block;
+        if (targetHour >= 6 && targetHour < 12) block = 'morning';
+        else if (targetHour >= 12 && targetHour < 18) block = 'afternoon';
+        else if (targetHour >= 18 && targetHour < 24) block = 'evening';
+        else block = 'night';
+
+        if (block === r.preferredBlock) {
+          score += 30;
+        } else if (ADJACENT_BLOCKS[r.preferredBlock]?.includes(block)) {
+          score += 10;
+        } else {
+          score -= 20;
+        }
+    }
+
+    // 1. Overlaps
+    for (let i = 0; i < len; i++) {
+      const start1 = starts[i];
+      const end1 = ends[i];
+      for (let j = i + 1; j < len; j++) {
+        const start2 = starts[j];
+        const end2 = ends[j];
+
+        const minEnd = end1 < end2 ? end1 : end2;
+        const maxStart = start1 > start2 ? start1 : start2;
+        const overlap = minEnd - maxStart;
         
-        const overlap = Math.max(0, Math.min(end1, end2) - Math.max(start1, start2));
         if (overlap > 0) {
-          score -= overlap * 100; // Large penalty for direct overlaps
+          score -= overlap * 100;
         }
       }
     }
@@ -469,17 +487,18 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
     for (let hour = 0; hour < 24; hour++) {
       let energyDemand = 0;
       const hourStartMin = hour * 60;
-      const hourEndMin = (hour + 1) * 60;
+      const hourEndMin = hourStartMin + 60;
       
-      for (let i = 0; i < sortedIndices.length; i++) {
-        const idx = sortedIndices[i];
-        const r = routines[idx];
-        const targetHour = chromosome[idx];
-        const startMin = targetHour * 60;
-        const endMin = startMin + r.duration;
-        const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+      for (let i = 0; i < len; i++) {
+        const startMin = starts[i];
+        const endMin = ends[i];
+
+        const minEnd = endMin < hourEndMin ? endMin : hourEndMin;
+        const maxStart = startMin > hourStartMin ? startMin : hourStartMin;
+        const overlap = minEnd - maxStart;
+
         if (overlap > 0) {
-          energyDemand += r.energy * (overlap / 60);
+          energyDemand += energies[i] * (overlap / 60);
         }
       }
       
@@ -490,28 +509,16 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
     }
     
     // 3. Rest Padding, Habit Stacking, and Conflict Groups
-    for (let i = 0; i < sortedIndices.length - 1; i++) {
-      const idx1 = sortedIndices[i];
-      const idx2 = sortedIndices[i + 1];
-      const r1 = routines[idx1];
-      const r2 = routines[idx2];
-      
-      const targetHour1 = chromosome[idx1];
-      const targetHour2 = chromosome[idx2];
-      
-      const start1 = targetHour1 * 60;
-      const end1 = start1 + r1.duration;
-      const start2 = targetHour2 * 60;
-      
-      const gap = start2 - end1;
+    for (let i = 0; i < len - 1; i++) {
+      const gap = starts[i + 1] - ends[i];
       if (gap >= 0) {
-        // Rest padding check
-        const requiredRestPadding = Math.max(0, (r1.energy - 2) * 10);
+        let requiredRestPadding = (energies[i] - 2) * 10;
+        if (requiredRestPadding < 0) requiredRestPadding = 0;
+
         if (gap < requiredRestPadding) {
           score -= (requiredRestPadding - gap) * 20;
         }
         
-        // Habit stacking check
         const optimalStart = requiredRestPadding;
         const optimalEnd = requiredRestPadding + 15;
         if (gap >= optimalStart && gap <= optimalEnd) {
@@ -520,8 +527,8 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
           score += 20;
         }
         
-        // Same conflict group buffer check
-        if (r1.conflictGroup && r2.conflictGroup && r1.conflictGroup === r2.conflictGroup) {
+        const cg1 = conflictGroups[i];
+        if (cg1 && cg1 === conflictGroups[i+1]) {
           if (gap < 45) {
             score -= (45 - gap) * 5;
           }

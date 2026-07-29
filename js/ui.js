@@ -444,18 +444,34 @@ export function renderTopBarStats(state) {
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => activeRoutineIds.has(id));
-    const dayOfWeek = checkDate.getDay();
-    const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
+    // OPTIMIZATION: Replaced O(N) array allocation `.filter(...).length > 0` with a simple loop and early break.
+    // This executes up to 365 times backward per render, allocating 730 intermediate arrays if we use `.filter`.
+    let hasValidComps = false;
+    for (let k = 0; k < completedOnDay.length; k++) {
+      if (activeRoutineIds.has(completedOnDay[k])) {
+        hasValidComps = true;
+        break;
+      }
+    }
 
-    if (validComps.length > 0) {
+    const dayOfWeek = checkDate.getDay();
+    // OPTIMIZATION: Early break loop to avoid .filter() array allocation overhead.
+    let hasScheduled = false;
+    for (let k = 0; k < state.routines.length; k++) {
+      if (state.routines[k].days.includes(dayOfWeek)) {
+        hasScheduled = true;
+        break;
+      }
+    }
+
+    if (hasValidComps) {
       globalStreak++;
     } else {
       // If it's today and they have scheduled routines but haven't completed any yet,
       // don't break the streak unless they completed nothing yesterday too.
-      if (isFirstCheck && checkStr === todayStr && routinesScheduled.length > 0) {
+      if (isFirstCheck && checkStr === todayStr && hasScheduled) {
         // Keep checking yesterday
-      } else if (routinesScheduled.length === 0) {
+      } else if (!hasScheduled) {
         // If nothing was scheduled, a miss doesn't break the streak
       } else {
         streakBroken = true;

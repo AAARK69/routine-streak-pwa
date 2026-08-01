@@ -1,3 +1,3 @@
-## 2024-05-14 - Map arrays to Set in deep loops
-**Learning:** The application heavily iterates over `state.routines` and `state.completions` during UI rendering loops. When evaluating active states inside these deep loops, always mapping arrays into O(1) `Set` objects beforehand prevents UI thread blocking from repeating O(N) array methods.
-**Action:** Always create `Set` objects for lookups in tight loops, particularly for `id` filtering.
+## 2024-05-24 - Zero-Allocation Date Checking
+**Learning:** In deep rendering loops (like recalculating streak badges 50+ times per frame update for an entire year), allocating new `Date()` objects and generating `.toISOString()` strings to query completed dates causes massive garbage collection stalls and CPU overhead.
+**Action:** Always parse strictly-formatted date strings (e.g., 'YYYY-MM-DD') using fast character math (`charCodeAt`) to derive UTC timestamps (`Date.UTC`), and iterate by adding `86400000` (one day in ms). Replace array `.includes()` for schedule checking with pre-calculated integer bitmasks (e.g. `scheduledBitmask & (1 << dayOfWeek)`) for sub-millisecond execution times.

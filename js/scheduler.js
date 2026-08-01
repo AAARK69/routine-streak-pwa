@@ -45,57 +45,89 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
     return { currentStreak: 0, maxStreak: 0 };
   }
 
-  // 1. Extract and sort completion dates for this routine
-  const completedDates = new Set();
-  Object.keys(completions).forEach(dateStr => {
-    if (completions[dateStr].includes(routine.id)) {
-      completedDates.add(dateStr);
-    }
-  });
+  // Optimize array lookups with a bitmask for fast scheduled day checking
+  let scheduledBitmask = 0;
+  for (let i = 0; i < scheduledDays.length; i++) {
+    scheduledBitmask |= (1 << scheduledDays[i]);
+  }
 
-  if (completedDates.size === 0) {
+  // 1. Extract completion dates for this routine (mapped directly to UTC timestamps for speed)
+  const completedTimestamps = new Set();
+  const keys = Object.keys(completions);
+  const keysLen = keys.length;
+  const routineId = routine.id;
+
+  let minTimestamp = Infinity;
+
+  for (let i = 0; i < keysLen; i++) {
+    const dateStr = keys[i];
+    const compArray = completions[dateStr];
+
+    if (compArray && compArray.includes(routineId)) {
+      // Fast manual parse of 'YYYY-MM-DD' without creating substrings or new Date() objects.
+      // NOTE: This optimization strictly assumes date strings are always formatted exactly as 'YYYY-MM-DD'.
+      const y = (dateStr.charCodeAt(0) - 48) * 1000 + (dateStr.charCodeAt(1) - 48) * 100 + (dateStr.charCodeAt(2) - 48) * 10 + (dateStr.charCodeAt(3) - 48);
+      const m = (dateStr.charCodeAt(5) - 48) * 10 + (dateStr.charCodeAt(6) - 48) - 1;
+      const d = (dateStr.charCodeAt(8) - 48) * 10 + (dateStr.charCodeAt(9) - 48);
+      const ts = Date.UTC(y, m, d);
+      completedTimestamps.add(ts);
+      if (ts < minTimestamp) {
+        minTimestamp = ts;
+      }
+    }
+  }
+
+  if (completedTimestamps.size === 0) {
     return { currentStreak: 0, maxStreak: 0 };
   }
 
+  const ONE_DAY = 86400000;
+  // NOTE: This optimization strictly assumes date strings are always formatted exactly as 'YYYY-MM-DD'.
+  const todayY = (todayStr.charCodeAt(0) - 48) * 1000 + (todayStr.charCodeAt(1) - 48) * 100 + (todayStr.charCodeAt(2) - 48) * 10 + (todayStr.charCodeAt(3) - 48);
+  const todayM = (todayStr.charCodeAt(5) - 48) * 10 + (todayStr.charCodeAt(6) - 48) - 1;
+  const todayD = (todayStr.charCodeAt(8) - 48) * 10 + (todayStr.charCodeAt(9) - 48);
+  const todayMs = Date.UTC(todayY, todayM, todayD);
+
   // 2. Chronological sweeping from the first completion up to today to find all-time max streak
-  const sortedCompletions = Array.from(completedDates).sort();
-  const startDate = new Date(sortedCompletions[0]);
-  const today = new Date(todayStr);
-  
   let maxStreak = 0;
   let runningStreak = 0;
   
-  let checkDate = new Date(startDate);
+  let currentMs = minTimestamp;
   let daysSwept = 0;
-  while (checkDate <= today) {
+
+  while (currentMs <= todayMs) {
     daysSwept++;
     if (daysSwept > 1000) {
       break; // Safety breakout for ancient or corrupt date imports
     }
-    const checkStr = checkDate.toISOString().split('T')[0];
-    const dayOfWeek = checkDate.getDay();
     
-    if (scheduledDays.includes(dayOfWeek)) {
-      if (completedDates.has(checkStr)) {
+    // Fast inline formula to get day of week (0-6, Sunday-Saturday) from a midnight UTC timestamp
+    // 1970-01-01 was a Thursday (4)
+    let dayOfWeek = ((currentMs / ONE_DAY) + 4) % 7;
+    if (dayOfWeek < 0) dayOfWeek += 7;
+
+    if ((scheduledBitmask & (1 << dayOfWeek)) !== 0) {
+      if (completedTimestamps.has(currentMs)) {
         runningStreak++;
         if (runningStreak > maxStreak) {
           maxStreak = runningStreak;
         }
       } else {
         // If checking a date strictly before today, a miss breaks the streak
-        if (checkStr !== todayStr) {
+        if (currentMs !== todayMs) {
           runningStreak = 0;
         }
       }
     }
-    checkDate.setDate(checkDate.getDate() + 1);
+
+    currentMs += ONE_DAY;
   }
 
   // 3. Calculate current streak (looking backward from today)
   let currentStreak = 0;
-  let lookDate = new Date(today);
   let streakBroken = false;
   let isFirstCheck = true;
+  let lookMs = todayMs;
   let daysChecked = 0;
 
   while (!streakBroken) {
@@ -103,15 +135,16 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
     if (daysChecked > 1000) { // Safety breakout to avoid infinite loop
       break;
     }
-    const lookStr = lookDate.toISOString().split('T')[0];
-    const dayOfWeek = lookDate.getDay();
 
-    if (scheduledDays.includes(dayOfWeek)) {
-      if (completedDates.has(lookStr)) {
+    let dayOfWeek = ((lookMs / ONE_DAY) + 4) % 7;
+    if (dayOfWeek < 0) dayOfWeek += 7;
+
+    if ((scheduledBitmask & (1 << dayOfWeek)) !== 0) {
+      if (completedTimestamps.has(lookMs)) {
         currentStreak++;
       } else {
         // If it's today and they haven't completed it yet, the streak isn't broken unless it's yesterday they missed
-        if (isFirstCheck && lookStr === todayStr) {
+        if (isFirstCheck && lookMs === todayMs) {
           // Streak is still active based on yesterday
         } else {
           streakBroken = true;
@@ -120,10 +153,10 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
     }
     
     isFirstCheck = false;
-    lookDate.setDate(lookDate.getDate() - 1);
+    lookMs -= ONE_DAY;
     
     // Safety break if checking too far in past
-    if (currentStreak > completedDates.size + 2) break;
+    if (currentStreak > completedTimestamps.size + 2) break;
   }
 
   // Ensure max streak is at least current streak

@@ -279,42 +279,42 @@ export function renderStreaks(state) {
   let totalCompletedSlots = 0;
   
   const today = new Date();
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
 
-    // How many scheduled on this day
-    const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
-    totalScheduledSlots += scheduledRoutines.length;
+  // OPTIMIZATION: Pre-calculate the number of scheduled routines per day-of-week (0-6)
+  // to avoid O(N) filtering inside the 30-day loop.
+  const routinesPerDayOfWeek = [0, 0, 0, 0, 0, 0, 0];
+  state.routines.forEach(r => {
+    r.days.forEach(d => routinesPerDayOfWeek[d]++);
+  });
 
-    // How many completed on this day
-    const completedIds = state.completions[dateStr] || [];
-    // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
-    totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
-
-  // 2. Renders 30-Day Activity Grid Heatmap
   const heatmapGrid = document.getElementById('streak-heatmap-grid');
   const heatmapFragment = document.createDocumentFragment();
 
+  // Combine both 30-day loops into a single pass
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
     const dayOfWeek = date.getDay();
 
-    const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
+    const scheduledCount = routinesPerDayOfWeek[dayOfWeek];
+    totalScheduledSlots += scheduledCount;
+
+    const completedIds = state.completions[dateStr] || [];
+    let validCompletionsCount = 0;
+
+    // Manual loop instead of .filter().length creates fewer intermediate arrays
+    for (let j = 0; j < completedIds.length; j++) {
+      if (activeRoutineIds.has(completedIds[j])) {
+        validCompletionsCount++;
+      }
+    }
+
+    totalCompletedSlots += validCompletionsCount;
 
     let intensity = 0; // default empty
-    if (scheduled.length > 0) {
-      const pct = completed.length / scheduled.length;
+    if (scheduledCount > 0) {
+      const pct = validCompletionsCount / scheduledCount;
       if (pct === 0) intensity = 0;
       else if (pct < 0.4) intensity = 1;
       else if (pct < 0.8) intensity = 2;
@@ -326,10 +326,13 @@ export function renderStreaks(state) {
     
     // Simple native tooltip description
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
+    cell.title = `${formattedDate}: Completed ${validCompletionsCount}/${scheduledCount} (${Math.round((scheduledCount > 0 ? validCompletionsCount/scheduledCount : 0)*100)}%)`;
 
     heatmapFragment.appendChild(cell);
   }
+
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);
@@ -540,6 +543,16 @@ export function renderYearGrid(state, onDayClick = null) {
     completionSets.set(dateStr, new Set(state.completions[dateStr]));
   });
 
+  const todayMidnightMs = todayMidnight.getTime();
+
+  // Pre-calculate routine colors and schedules
+  const routineColors = sortedRoutinesForCells.map(rt => CATEGORY_COLORS[rt.category] || '#00f0ff');
+  const routineSchedules = sortedRoutinesForCells.map(rt => {
+    let mask = 0;
+    rt.days.forEach(d => mask |= (1 << d));
+    return mask;
+  });
+
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
     monthCard.className = 'month-card';
@@ -560,10 +573,14 @@ export function renderYearGrid(state, onDayClick = null) {
     // 2. Render actual calendar days (1 to month.days)
     for (let day = 1; day <= month.days; day++) {
       const cellDate = new Date(2026, mIndex, day);
+      const cellDateMs = cellDate.getTime();
       const dow = cellDate.getDay();
-      const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
       
-      const isFuture = cellDate > todayMidnight;
+      const monthStr = mIndex < 9 ? '0' + (mIndex + 1) : '' + (mIndex + 1);
+      const dayStr = day < 10 ? '0' + day : '' + day;
+      const dateStr = '2026-' + monthStr + '-' + dayStr;
+
+      const isFuture = cellDateMs > todayMidnightMs;
       
       let subBoxesHtml = '';
 
@@ -575,9 +592,11 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
-        sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
-          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+        const completionsOnDate = completionSets.get(dateStr);
+
+        sortedRoutinesForCells.forEach((rt, index) => {
+          const isScheduled = (routineSchedules[index] & (1 << dow)) !== 0;
+          const color = routineColors[index];
           
           let statusClass = 'inactive';
 
@@ -586,7 +605,6 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
               const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
@@ -609,8 +627,8 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
+      const isFutureCell = isFuture;
+      const hasRoutinesOnDay = routineSchedules.some(mask => (mask & (1 << dow)) !== 0);
       const isClickable = !isFutureCell || hasRoutinesOnDay;
 
       daysHtml += `

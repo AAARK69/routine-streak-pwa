@@ -36,13 +36,30 @@ export function getEnergyCapacity(hour) {
 }
 
 /**
+ * Fast date string parser to UTC ms
+ * @param {string} dateStr YYYY-MM-DD
+ */
+function fastParse(dateStr) {
+  const y = (dateStr.charCodeAt(0) - 48) * 1000 + (dateStr.charCodeAt(1) - 48) * 100 + (dateStr.charCodeAt(2) - 48) * 10 + (dateStr.charCodeAt(3) - 48);
+  const m = (dateStr.charCodeAt(5) - 48) * 10 + (dateStr.charCodeAt(6) - 48) - 1;
+  const d = (dateStr.charCodeAt(8) - 48) * 10 + (dateStr.charCodeAt(9) - 48);
+  return Date.UTC(y, m, d);
+}
+
+/**
  * Calculates current streak and maximum all-time streak for a routine based on its completion history.
  * A streak is calculated strictly on scheduled days (i.e. skipping non-scheduled days).
+ * Optimized to avoid expensive Date string allocations inside the iteration loop.
  */
 export function calculateStreak(routine, completions, todayStr = new Date().toISOString().split('T')[0]) {
   const scheduledDays = routine.days;
   if (!scheduledDays || scheduledDays.length === 0) {
     return { currentStreak: 0, maxStreak: 0 };
+  }
+
+  let scheduleMask = 0;
+  for (let i = 0; i < scheduledDays.length; i++) {
+    scheduleMask |= (1 << scheduledDays[i]);
   }
 
   // 1. Extract and sort completion dates for this routine
@@ -59,23 +76,27 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
 
   // 2. Chronological sweeping from the first completion up to today to find all-time max streak
   const sortedCompletions = Array.from(completedDates).sort();
-  const startDate = new Date(sortedCompletions[0]);
-  const today = new Date(todayStr);
+  const startMs = fastParse(sortedCompletions[0]);
+  const todayMs = fastParse(todayStr);
   
   let maxStreak = 0;
   let runningStreak = 0;
   
-  let checkDate = new Date(startDate);
+  let checkDate = new Date(startMs);
   let daysSwept = 0;
-  while (checkDate <= today) {
+  while (checkDate.getTime() <= todayMs) {
     daysSwept++;
     if (daysSwept > 1000) {
       break; // Safety breakout for ancient or corrupt date imports
     }
-    const checkStr = checkDate.toISOString().split('T')[0];
-    const dayOfWeek = checkDate.getDay();
+    const y = checkDate.getUTCFullYear();
+    const m = checkDate.getUTCMonth() + 1;
+    const d = checkDate.getUTCDate();
+    const checkStr = `${y}-${m < 10 ? '0' + m : m}-${d < 10 ? '0' + d : d}`;
     
-    if (scheduledDays.includes(dayOfWeek)) {
+    const dayOfWeek = checkDate.getUTCDay();
+
+    if ((scheduleMask & (1 << dayOfWeek)) !== 0) {
       if (completedDates.has(checkStr)) {
         runningStreak++;
         if (runningStreak > maxStreak) {
@@ -88,12 +109,12 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
         }
       }
     }
-    checkDate.setDate(checkDate.getDate() + 1);
+    checkDate.setUTCDate(checkDate.getUTCDate() + 1);
   }
 
   // 3. Calculate current streak (looking backward from today)
   let currentStreak = 0;
-  let lookDate = new Date(today);
+  let lookDate = new Date(todayMs);
   let streakBroken = false;
   let isFirstCheck = true;
   let daysChecked = 0;
@@ -103,10 +124,14 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
     if (daysChecked > 1000) { // Safety breakout to avoid infinite loop
       break;
     }
-    const lookStr = lookDate.toISOString().split('T')[0];
-    const dayOfWeek = lookDate.getDay();
+    const y = lookDate.getUTCFullYear();
+    const m = lookDate.getUTCMonth() + 1;
+    const d = lookDate.getUTCDate();
+    const lookStr = `${y}-${m < 10 ? '0' + m : m}-${d < 10 ? '0' + d : d}`;
 
-    if (scheduledDays.includes(dayOfWeek)) {
+    const dayOfWeek = lookDate.getUTCDay();
+
+    if ((scheduleMask & (1 << dayOfWeek)) !== 0) {
       if (completedDates.has(lookStr)) {
         currentStreak++;
       } else {
@@ -120,7 +145,7 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
     }
     
     isFirstCheck = false;
-    lookDate.setDate(lookDate.getDate() - 1);
+    lookDate.setUTCDate(lookDate.getUTCDate() - 1);
     
     // Safety break if checking too far in past
     if (currentStreak > completedDates.size + 2) break;

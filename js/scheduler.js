@@ -45,73 +45,90 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
     return { currentStreak: 0, maxStreak: 0 };
   }
 
-  // 1. Extract and sort completion dates for this routine
-  const completedDates = new Set();
-  Object.keys(completions).forEach(dateStr => {
-    if (completions[dateStr].includes(routine.id)) {
-      completedDates.add(dateStr);
-    }
-  });
+  // Pre-calculate integer bitmask for O(1) schedule checking
+  let scheduledMask = 0;
+  for (let i = 0; i < scheduledDays.length; i++) {
+    scheduledMask |= (1 << scheduledDays[i]);
+  }
 
-  if (completedDates.size === 0) {
+  const parseDateToUTC = (str) => {
+    return Date.UTC(
+      str.charCodeAt(0) * 1000 + str.charCodeAt(1) * 100 + str.charCodeAt(2) * 10 + str.charCodeAt(3) - 53328,
+      str.charCodeAt(5) * 10 + str.charCodeAt(6) - 529,
+      str.charCodeAt(8) * 10 + str.charCodeAt(9) - 528
+    );
+  };
+
+  // 1. Extract and sort completion dates for this routine
+  const completedTimestamps = new Set();
+  const completedDatesArr = [];
+
+  for (const dateStr in completions) {
+    if (completions[dateStr].includes(routine.id)) {
+      completedDatesArr.push(dateStr);
+      completedTimestamps.add(parseDateToUTC(dateStr));
+    }
+  }
+
+  if (completedTimestamps.size === 0) {
     return { currentStreak: 0, maxStreak: 0 };
   }
 
   // 2. Chronological sweeping from the first completion up to today to find all-time max streak
-  const sortedCompletions = Array.from(completedDates).sort();
-  const startDate = new Date(sortedCompletions[0]);
-  const today = new Date(todayStr);
+  completedDatesArr.sort();
+  let checkTs = parseDateToUTC(completedDatesArr[0]);
+  const todayTs = parseDateToUTC(todayStr);
   
   let maxStreak = 0;
   let runningStreak = 0;
   
-  let checkDate = new Date(startDate);
   let daysSwept = 0;
-  while (checkDate <= today) {
+  let dayOfWeek = new Date(checkTs).getUTCDay();
+
+  while (checkTs <= todayTs) {
     daysSwept++;
     if (daysSwept > 1000) {
       break; // Safety breakout for ancient or corrupt date imports
     }
-    const checkStr = checkDate.toISOString().split('T')[0];
-    const dayOfWeek = checkDate.getDay();
     
-    if (scheduledDays.includes(dayOfWeek)) {
-      if (completedDates.has(checkStr)) {
+    if ((scheduledMask & (1 << dayOfWeek)) !== 0) {
+      if (completedTimestamps.has(checkTs)) {
         runningStreak++;
         if (runningStreak > maxStreak) {
           maxStreak = runningStreak;
         }
       } else {
         // If checking a date strictly before today, a miss breaks the streak
-        if (checkStr !== todayStr) {
+        if (checkTs !== todayTs) {
           runningStreak = 0;
         }
       }
     }
-    checkDate.setDate(checkDate.getDate() + 1);
+    checkTs += 86400000;
+    dayOfWeek = (dayOfWeek + 1) % 7;
   }
 
   // 3. Calculate current streak (looking backward from today)
   let currentStreak = 0;
-  let lookDate = new Date(today);
   let streakBroken = false;
   let isFirstCheck = true;
   let daysChecked = 0;
+
+  let lookTs = todayTs;
+  dayOfWeek = new Date(lookTs).getUTCDay();
 
   while (!streakBroken) {
     daysChecked++;
     if (daysChecked > 1000) { // Safety breakout to avoid infinite loop
       break;
     }
-    const lookStr = lookDate.toISOString().split('T')[0];
-    const dayOfWeek = lookDate.getDay();
 
-    if (scheduledDays.includes(dayOfWeek)) {
-      if (completedDates.has(lookStr)) {
+    if ((scheduledMask & (1 << dayOfWeek)) !== 0) {
+      if (completedTimestamps.has(lookTs)) {
         currentStreak++;
       } else {
         // If it's today and they haven't completed it yet, the streak isn't broken unless it's yesterday they missed
-        if (isFirstCheck && lookStr === todayStr) {
+        if (isFirstCheck && lookTs === todayTs) {
           // Streak is still active based on yesterday
         } else {
           streakBroken = true;
@@ -120,10 +137,11 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
     }
     
     isFirstCheck = false;
-    lookDate.setDate(lookDate.getDate() - 1);
+    lookTs -= 86400000;
+    dayOfWeek = (dayOfWeek + 6) % 7;
     
     // Safety break if checking too far in past
-    if (currentStreak > completedDates.size + 2) break;
+    if (currentStreak > completedTimestamps.size + 2) break;
   }
 
   // Ensure max streak is at least current streak

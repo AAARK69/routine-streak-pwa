@@ -279,11 +279,12 @@ export function renderStreaks(state) {
   let totalCompletedSlots = 0;
   
   const today = new Date();
+  const dateIterator = new Date(today);
+  dateIterator.setDate(today.getDate() - 30);
+
   for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = dateIterator.getDay();
+    const dateStr = dateIterator.toISOString().substring(0, 10);
 
     // How many scheduled on this day
     const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
@@ -292,8 +293,13 @@ export function renderStreaks(state) {
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
-    totalCompletedSlots += validCompletions.length;
+    let validCompsLength = 0;
+    for (let j = 0; j < completedIds.length; j++) {
+      if (activeRoutineIds.has(completedIds[j])) validCompsLength++;
+    }
+    totalCompletedSlots += validCompsLength;
+
+    dateIterator.setDate(dateIterator.getDate() + 1);
   }
 
   const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
@@ -303,18 +309,23 @@ export function renderStreaks(state) {
   const heatmapGrid = document.getElementById('streak-heatmap-grid');
   const heatmapFragment = document.createDocumentFragment();
 
+  const heatMapDateIterator = new Date(today);
+  heatMapDateIterator.setDate(today.getDate() - 30);
+
   for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = heatMapDateIterator.getDay();
+    const dateStr = heatMapDateIterator.toISOString().substring(0, 10);
 
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
+    const completedIds = state.completions[dateStr] || [];
+    let completedLength = 0;
+    for (let j = 0; j < completedIds.length; j++) {
+      if (activeRoutineIds.has(completedIds[j])) completedLength++;
+    }
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
-      const pct = completed.length / scheduled.length;
+      const pct = completedLength / scheduled.length;
       if (pct === 0) intensity = 0;
       else if (pct < 0.4) intensity = 1;
       else if (pct < 0.8) intensity = 2;
@@ -325,10 +336,11 @@ export function renderStreaks(state) {
     cell.className = `heatmap-cell color-${intensity}`;
     
     // Simple native tooltip description
-    const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
+    const formattedDate = heatMapDateIterator.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    cell.title = `${formattedDate}: Completed ${completedLength}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completedLength/scheduled.length : 0)*100)}%)`;
 
     heatmapFragment.appendChild(cell);
+    heatMapDateIterator.setDate(heatMapDateIterator.getDate() + 1);
   }
 
   heatmapGrid.innerHTML = '';
@@ -440,15 +452,18 @@ export function renderTopBarStats(state) {
       break; // Safety break to prevent infinite loops under empty schedules
     }
 
-    const checkStr = checkDate.toISOString().split('T')[0];
+    const checkStr = checkDate.toISOString().substring(0, 10);
     const completedOnDay = state.completions[checkStr] || [];
     
     // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => activeRoutineIds.has(id));
+    let validCompsLength = 0;
+    for (let j = 0; j < completedOnDay.length; j++) {
+      if (activeRoutineIds.has(completedOnDay[j])) validCompsLength++;
+    }
     const dayOfWeek = checkDate.getDay();
     const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 
-    if (validComps.length > 0) {
+    if (validCompsLength > 0) {
       globalStreak++;
     } else {
       // If it's today and they have scheduled routines but haven't completed any yet,
@@ -532,6 +547,18 @@ export function renderYearGrid(state, onDayClick = null) {
   // Sort routines consistently for day-cells as well!
   const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
 
+  // OPTIMIZATION: precompute color strings and day bitmasks
+  const precomputedRoutines = sortedRoutinesForCells.map(rt => {
+    let dayMask = 0;
+    rt.days.forEach(d => { dayMask |= (1 << d); });
+    return {
+      id: rt.id,
+      dayMask: dayMask,
+      colorSpan: '<span class="calendar-sub-box ',
+      colorSpanEnd: '" style="--accent-color: ' + (CATEGORY_COLORS[rt.category] || '#00f0ff') + '"></span>'
+    };
+  });
+
   const yearFragment = document.createDocumentFragment();
 
   // Pre-map completion arrays to Sets for O(1) lookup inside the deep loop
@@ -545,7 +572,8 @@ export function renderYearGrid(state, onDayClick = null) {
     monthCard.className = 'month-card';
 
     // Calculate starting weekday for 2026
-    const firstDayOfWeek = new Date(2026, mIndex, 1).getDay();
+    const dateIterator = new Date(2026, mIndex, 1);
+    const firstDayOfWeek = dateIterator.getDay();
 
     let daysHtml = '';
     
@@ -559,25 +587,31 @@ export function renderYearGrid(state, onDayClick = null) {
 
     // 2. Render actual calendar days (1 to month.days)
     for (let day = 1; day <= month.days; day++) {
-      const cellDate = new Date(2026, mIndex, day);
-      const dow = cellDate.getDay();
-      const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      dateIterator.setDate(day);
+      const dow = dateIterator.getDay();
+      const dowMask = 1 << dow;
+
+      const mStr = String(mIndex + 1).padStart(2, '0');
+      const dStr = String(day).padStart(2, '0');
+      const dateStr = '2026-' + mStr + '-' + dStr;
       
-      const isFuture = cellDate > todayMidnight;
+      const cellTime = dateIterator.getTime();
+      const isFuture = cellTime > todayMidnight;
       
       let subBoxesHtml = '';
 
-      if (sortedRoutinesForCells.length === 0) {
+      if (precomputedRoutines.length === 0) {
         // Blank slate visual
         const statusClass = isFuture ? 'future' : 'inactive';
-        subBoxesHtml = `<span class="calendar-sub-box ${statusClass}"></span>`;
+        subBoxesHtml = '<span class="calendar-sub-box ' + statusClass + '"></span>';
       } else {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
+        const completionsOnDate = completionSets.get(dateStr);
 
-        sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
-          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+        for(let rIdx = 0; rIdx < precomputedRoutines.length; rIdx++) {
+          const rt = precomputedRoutines[rIdx];
+          const isScheduled = (rt.dayMask & dowMask) !== 0;
           
           let statusClass = 'inactive';
 
@@ -586,7 +620,6 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
               const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
@@ -597,8 +630,8 @@ export function renderYearGrid(state, onDayClick = null) {
             }
           }
 
-          subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+          subBoxesHtml += rt.colorSpan + statusClass + rt.colorSpanEnd;
+        }
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -609,9 +642,15 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
-      const isClickable = !isFutureCell || hasRoutinesOnDay;
+      // Precompute if any routine scheduled
+      let hasRoutinesOnDay = false;
+      for (let rIdx = 0; rIdx < precomputedRoutines.length; rIdx++) {
+          if ((precomputedRoutines[rIdx].dayMask & dowMask) !== 0) {
+              hasRoutinesOnDay = true;
+              break;
+          }
+      }
+      const isClickable = !isFuture || hasRoutinesOnDay;
 
       daysHtml += `
         <button class="calendar-day-cell${isClickable ? ' clickable' : ''}" 

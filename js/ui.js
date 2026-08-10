@@ -391,16 +391,34 @@ export function renderStreaks(state) {
  * Renders stats summary and progress bar at the top of the app
  */
 export function renderTopBarStats(state) {
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayDay = new Date().getDay();
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split('T')[0];
+  const todayDay = todayDate.getDay();
   const activeRoutineIds = new Set(state.routines.map(r => r.id));
 
-  // 1. Calculate Daily Progress Bar
-  const todayRoutines = state.routines.filter(r => r.days.includes(todayDay));
-  const completedToday = (state.completions[todayStr] || []).filter(id => activeRoutineIds.has(id));
+  // Pre-calculate routines by day to avoid O(N) filtering inside loops
+  const routinesByDay = [0,0,0,0,0,0,0];
+  let hasAnyScheduledRoutines = false;
+  for (let i = 0; i < state.routines.length; i++) {
+    const days = state.routines[i].days;
+    if (days && days.length > 0) hasAnyScheduledRoutines = true;
+    for (let j = 0; j < days.length; j++) {
+      routinesByDay[days[j]]++;
+    }
+  }
 
-  const countScheduled = todayRoutines.length;
-  const countCompleted = completedToday.length;
+  // 1. Calculate Daily Progress Bar
+  const countScheduled = routinesByDay[todayDay];
+
+  let countCompleted = 0;
+  const completedTodayArr = state.completions[todayStr];
+  if(completedTodayArr) {
+     for (let i = 0; i < completedTodayArr.length; i++) {
+        if (activeRoutineIds.has(completedTodayArr[i])) {
+           countCompleted++;
+        }
+     }
+  }
 
   const bar = document.getElementById('today-progress');
   const ratioLabel = document.getElementById('today-completion-ratio');
@@ -420,7 +438,6 @@ export function renderTopBarStats(state) {
 
   // 2. Global Streak Calculation
   // Consecutives days looking backward from today where at least 1 task was completed
-  const hasAnyScheduledRoutines = state.routines.some(r => r.days && r.days.length > 0);
   if (!hasAnyScheduledRoutines) {
     document.getElementById('global-streak-count').textContent = '0';
     return {
@@ -429,10 +446,12 @@ export function renderTopBarStats(state) {
   }
 
   let globalStreak = 0;
-  let checkDate = new Date();
   let streakBroken = false;
   let isFirstCheck = true;
   let daysChecked = 0;
+
+  // By reusing a single Date object, we avoid instantiation overhead in the loop
+  let checkDate = new Date();
 
   while (!streakBroken) {
     daysChecked++;
@@ -440,22 +459,31 @@ export function renderTopBarStats(state) {
       break; // Safety break to prevent infinite loops under empty schedules
     }
 
-    const checkStr = checkDate.toISOString().split('T')[0];
-    const completedOnDay = state.completions[checkStr] || [];
-    
-    // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => activeRoutineIds.has(id));
+    const checkStr = checkDate.toISOString().substring(0, 10);
     const dayOfWeek = checkDate.getDay();
-    const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
 
-    if (validComps.length > 0) {
+    // Count only currently valid routines completed using fast loop
+    let validCompsCount = 0;
+    const completedOnDay = state.completions[checkStr];
+    if(completedOnDay) {
+       for(let i=0; i<completedOnDay.length; i++) {
+          if(activeRoutineIds.has(completedOnDay[i])) {
+             validCompsCount++;
+             break; // We only need at least 1 valid comp
+          }
+       }
+    }
+
+    const routinesScheduledCount = routinesByDay[dayOfWeek];
+
+    if (validCompsCount > 0) {
       globalStreak++;
     } else {
       // If it's today and they have scheduled routines but haven't completed any yet,
       // don't break the streak unless they completed nothing yesterday too.
-      if (isFirstCheck && checkStr === todayStr && routinesScheduled.length > 0) {
+      if (isFirstCheck && checkStr === todayStr && routinesScheduledCount > 0) {
         // Keep checking yesterday
-      } else if (routinesScheduled.length === 0) {
+      } else if (routinesScheduledCount === 0) {
         // If nothing was scheduled, a miss doesn't break the streak
       } else {
         streakBroken = true;

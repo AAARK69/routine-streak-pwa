@@ -279,42 +279,47 @@ export function renderStreaks(state) {
   let totalCompletedSlots = 0;
   
   const today = new Date();
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
-
-    // How many scheduled on this day
-    const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
-    totalScheduledSlots += scheduledRoutines.length;
-
-    // How many completed on this day
-    const completedIds = state.completions[dateStr] || [];
-    // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
-    totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
 
   // 2. Renders 30-Day Activity Grid Heatmap
   const heatmapGrid = document.getElementById('streak-heatmap-grid');
   const heatmapFragment = document.createDocumentFragment();
 
+  // OPTIMIZATION: Pre-calculate schedules per day of week outside loop
+  // Replaces the O(N) array filtering in the deep 30-day rendering loop
+  const scheduledByDay = new Array(7);
+  for (let i = 0; i < 7; i++) {
+    scheduledByDay[i] = state.routines.filter(r => r.days.includes(i));
+  }
+
+  // Combine both 30-day loops into a single pass to eliminate redundant
+  // Date instantiation and string parsing
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
     const dayOfWeek = date.getDay();
 
-    const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
+    const scheduled = scheduledByDay[dayOfWeek];
+    const scheduledLength = scheduled.length;
+    totalScheduledSlots += scheduledLength;
+
+    // How many completed on this day
+    const completedIds = state.completions[dateStr] || [];
+
+    // Count only completions of routines currently defined
+    // OPTIMIZATION: Use for loop and early break instead of full .filter() reallocation
+    let countValidCompletions = 0;
+    for (let j = 0; j < completedIds.length; j++) {
+      if (activeRoutineIds.has(completedIds[j])) {
+        countValidCompletions++;
+      }
+    }
+
+    totalCompletedSlots += countValidCompletions;
 
     let intensity = 0; // default empty
-    if (scheduled.length > 0) {
-      const pct = completed.length / scheduled.length;
+    if (scheduledLength > 0) {
+      const pct = countValidCompletions / scheduledLength;
       if (pct === 0) intensity = 0;
       else if (pct < 0.4) intensity = 1;
       else if (pct < 0.8) intensity = 2;
@@ -326,10 +331,14 @@ export function renderStreaks(state) {
     
     // Simple native tooltip description
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
+    const pctInt = scheduledLength > 0 ? Math.round((countValidCompletions / scheduledLength) * 100) : 0;
+    cell.title = `${formattedDate}: Completed ${countValidCompletions}/${scheduledLength} (${pctInt}%)`;
 
     heatmapFragment.appendChild(cell);
   }
+
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);

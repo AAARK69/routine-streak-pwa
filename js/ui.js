@@ -279,6 +279,11 @@ export function renderStreaks(state) {
   let totalCompletedSlots = 0;
   
   const today = new Date();
+
+  // 2. Renders 30-Day Activity Grid Heatmap
+  const heatmapGrid = document.getElementById('streak-heatmap-grid');
+  const heatmapFragment = document.createDocumentFragment();
+
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
@@ -294,27 +299,10 @@ export function renderStreaks(state) {
     // Count only completions of routines currently defined
     const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
     totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
-
-  // 2. Renders 30-Day Activity Grid Heatmap
-  const heatmapGrid = document.getElementById('streak-heatmap-grid');
-  const heatmapFragment = document.createDocumentFragment();
-
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
-
-    const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
 
     let intensity = 0; // default empty
-    if (scheduled.length > 0) {
-      const pct = completed.length / scheduled.length;
+    if (scheduledRoutines.length > 0) {
+      const pct = validCompletions.length / scheduledRoutines.length;
       if (pct === 0) intensity = 0;
       else if (pct < 0.4) intensity = 1;
       else if (pct < 0.8) intensity = 2;
@@ -326,10 +314,13 @@ export function renderStreaks(state) {
     
     // Simple native tooltip description
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
+    cell.title = `${formattedDate}: Completed ${validCompletions.length}/${scheduledRoutines.length} (${Math.round((scheduledRoutines.length > 0 ? validCompletions.length/scheduledRoutines.length : 0)*100)}%)`;
 
     heatmapFragment.appendChild(cell);
   }
+
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);

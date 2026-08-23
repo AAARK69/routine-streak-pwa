@@ -46,12 +46,17 @@ export function calculateStreak(routine, completions, todayStr = new Date().toIS
   }
 
   // 1. Extract and sort completion dates for this routine
-  const completedDates = new Set();
-  Object.keys(completions).forEach(dateStr => {
-    if (completions[dateStr].includes(routine.id)) {
-      completedDates.add(dateStr);
-    }
-  });
+  let completedDates;
+  if (completions instanceof Set) {
+    completedDates = completions;
+  } else {
+    completedDates = new Set();
+    Object.keys(completions).forEach(dateStr => {
+      if (completions[dateStr].includes(routine.id)) {
+        completedDates.add(dateStr);
+      }
+    });
+  }
 
   if (completedDates.size === 0) {
     return { currentStreak: 0, maxStreak: 0 };

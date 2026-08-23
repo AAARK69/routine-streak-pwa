@@ -1,3 +1,6 @@
 ## 2024-05-14 - Map arrays to Set in deep loops
 **Learning:** The application heavily iterates over `state.routines` and `state.completions` during UI rendering loops. When evaluating active states inside these deep loops, always mapping arrays into O(1) `Set` objects beforehand prevents UI thread blocking from repeating O(N) array methods.
 **Action:** Always create `Set` objects for lookups in tight loops, particularly for `id` filtering.
+## 2024-05-14 - Pre-calculating Lookups and Maps of Sets in UI Rendering Loops
+**Learning:** In complex UI rendering loops that calculate statistics across days and routines (like 30-day streak heatmaps), avoiding O(N) array filtering (e.g., `state.routines.filter(r => r.days.includes(dayOfWeek))`) inside the loops is critical. Furthermore, when multiple routines need to calculate their individual streaks by querying the global `state.completions` map, it is far more efficient to invert the data structure once before the loop (creating a Map of `Sets` of completion dates per routine) rather than having each routine re-traverse and re-map the entire completions object.
+**Action:** Always pre-calculate day-based array lookups and invert map relationships into O(1) `Set` lookups *before* entering deep iterative rendering or sorting loops.

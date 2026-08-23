@@ -278,7 +278,17 @@ export function renderStreaks(state) {
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
   
+  const heatmapGrid = document.getElementById('streak-heatmap-grid');
+  const heatmapFragment = document.createDocumentFragment();
+
   const today = new Date();
+
+  // Quick lookup for routines by day
+  const routinesByDay = Array.from({ length: 7 }, () => []);
+  state.routines.forEach(r => {
+    r.days.forEach(day => routinesByDay[day].push(r));
+  });
+
   for (let i = 30; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
@@ -286,32 +296,16 @@ export function renderStreaks(state) {
     const dayOfWeek = date.getDay();
 
     // How many scheduled on this day
-    const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
-    totalScheduledSlots += scheduledRoutines.length;
+    const scheduled = routinesByDay[dayOfWeek];
+    totalScheduledSlots += scheduled.length;
 
     // How many completed on this day
     const completedIds = state.completions[dateStr] || [];
     // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
-    totalCompletedSlots += validCompletions.length;
-  }
+    const completed = completedIds.filter(id => activeRoutineIds.has(id));
+    totalCompletedSlots += completed.length;
 
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
-
-  // 2. Renders 30-Day Activity Grid Heatmap
-  const heatmapGrid = document.getElementById('streak-heatmap-grid');
-  const heatmapFragment = document.createDocumentFragment();
-
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
-
-    const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
-
+    // 2. Renders 30-Day Activity Grid Heatmap
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
       const pct = completed.length / scheduled.length;
@@ -331,6 +325,9 @@ export function renderStreaks(state) {
     heatmapFragment.appendChild(cell);
   }
 
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
+
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);
 
@@ -348,9 +345,22 @@ export function renderStreaks(state) {
 
   // Sort routines by priority / streak
   // OPTIMIZATION: Memoize expensive calculateStreak calls before sorting
+  const routineCompletions = new Map();
+  Object.keys(state.completions).forEach(dateStr => {
+    state.completions[dateStr].forEach(id => {
+      let set = routineCompletions.get(id);
+      if (!set) {
+        set = new Set();
+        routineCompletions.set(id, set);
+      }
+      set.add(dateStr);
+    });
+  });
+
   const streakCache = new Map();
   state.routines.forEach(rt => {
-    streakCache.set(rt.id, calculateStreak(rt, state.completions, todayStr));
+    const datesSet = routineCompletions.get(rt.id) || new Set();
+    streakCache.set(rt.id, calculateStreak(rt, datesSet, todayStr));
   });
 
   const sortedRoutines = [...state.routines].sort((a, b) => {

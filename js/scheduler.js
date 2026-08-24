@@ -199,7 +199,9 @@ export function checkConflictsForDay(dayOfWeek, routines) {
     activeRoutines.forEach(r => {
       const startMin = r.targetHour * 60;
       const endMin = startMin + r.duration;
-      const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+      const minEnd = endMin < hourEndMin ? endMin : hourEndMin;
+      const maxStart = startMin > hourStartMin ? startMin : hourStartMin;
+      const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
       if (overlap > 0) {
         energyDemand += r.energy * (overlap / 60);
       }
@@ -326,14 +328,18 @@ export function scoreHourForRoutine(hour, routine, otherRoutines) {
       dayRoutines.forEach(r => {
         const startMin = r.targetHour * 60;
         const endMin = startMin + r.duration;
-        const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+        const minEnd = endMin < hourEndMin ? endMin : hourEndMin;
+        const maxStart = startMin > hourStartMin ? startMin : hourStartMin;
+        const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
         if (overlap > 0) {
           energyDemand += r.energy * (overlap / 60);
         }
       });
       
       // Current routine's demand
-      const currentOverlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+      const minEndCurrent = endMin < hourEndMin ? endMin : hourEndMin;
+      const maxStartCurrent = startMin > hourStartMin ? startMin : hourStartMin;
+      const currentOverlap = minEndCurrent > maxStartCurrent ? minEndCurrent - maxStartCurrent : 0;
       energyDemand += routine.energy * (currentOverlap / 60);
       
       const capacity = getEnergyCapacity(h);
@@ -409,8 +415,8 @@ function hydrate(chromosome, routines) {
 export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRoutineIndices = null) {
   if (fitnessCache) {
     const key = chromosome.join(',');
-    if (fitnessCache[key] !== undefined) {
-      return fitnessCache[key];
+    if (fitnessCache.has(key)) {
+      return fitnessCache.get(key);
     }
   }
 
@@ -458,7 +464,9 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
         const start2 = targetHour2 * 60;
         const end2 = start2 + r2.duration;
         
-        const overlap = Math.max(0, Math.min(end1, end2) - Math.max(start1, start2));
+        const minEnd = end1 < end2 ? end1 : end2;
+        const maxStart = start1 > start2 ? start1 : start2;
+        const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
         if (overlap > 0) {
           score -= overlap * 100; // Large penalty for direct overlaps
         }
@@ -477,7 +485,9 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
         const targetHour = chromosome[idx];
         const startMin = targetHour * 60;
         const endMin = startMin + r.duration;
-        const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+        const minEnd = endMin < hourEndMin ? endMin : hourEndMin;
+        const maxStart = startMin > hourStartMin ? startMin : hourStartMin;
+        const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
         if (overlap > 0) {
           energyDemand += r.energy * (overlap / 60);
         }
@@ -532,7 +542,7 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
   
   if (fitnessCache) {
     const key = chromosome.join(',');
-    fitnessCache[key] = score;
+    fitnessCache.set(key, score);
   }
   
   return score;
@@ -577,7 +587,7 @@ export function optimizeAllSchedules(routines) {
   });
   
   // Initialize fitness cache for memoization
-  const fitnessCache = {};
+  const fitnessCache = new Map();
   
   let pop = [];
   
@@ -586,7 +596,8 @@ export function optimizeAllSchedules(routines) {
   
   // Rest of the population: completely randomized start target hours
   for (let p = 1; p < popSize; p++) {
-    const chrom = Array.from({ length: N }, () => Math.floor(Math.random() * 24));
+    const chrom = new Array(N);
+    for (let j = 0; j < N; j++) chrom[j] = Math.floor(Math.random() * 24);
     pop.push(chrom);
   }
   
@@ -595,7 +606,8 @@ export function optimizeAllSchedules(routines) {
     const fitnesses = pop.map(chrom => evaluateFitness(chrom, routines, fitnessCache, dayRoutineIndices));
     
     // Index mapping to sort by fitness descending
-    const indices = Array.from({ length: popSize }, (_, i) => i);
+    const indices = new Array(popSize);
+    for (let i = 0; i < popSize; i++) indices[i] = i;
     indices.sort((a, b) => fitnesses[b] - fitnesses[a]);
     
     const sortedPop = indices.map(idx => pop[idx]);

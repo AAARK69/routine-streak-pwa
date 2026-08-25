@@ -63,8 +63,11 @@ export function renderTimeline(day, state, onToggleComplete, onEditClick, active
 
   const fragment = document.createDocumentFragment();
 
+  // Create O(1) lookup set for completions to prevent repeating O(N) .includes() calls in the render loop
+  const completionsSet = new Set(state.completions[todayStr] || []);
+
   activeRoutines.forEach((rt, index) => {
-    const isCompleted = (state.completions[todayStr] || []).includes(rt.id);
+    const isCompleted = completionsSet.has(rt.id);
     const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
 
     // 3. Habit-Stacking Connectors Check

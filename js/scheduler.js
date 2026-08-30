@@ -29,10 +29,19 @@ export function getBlockForHour(hour) {
  * C(t) = 7.5 + 3.0 * sin(2 * pi * (t - 6) / 24) + 1.8 * sin(4 * pi * (t - 9) / 24)
  * Returns values between 2.0 and 12.0 representing hourly energy capacity.
  */
+
+const _energyCapacityCache = new Float32Array(24);
+let _energyCacheInitialized = false;
 export function getEnergyCapacity(hour) {
-  const t = hour;
-  const capacity = 7.5 + 3.0 * Math.sin((2 * Math.PI * (t - 6)) / 24) + 1.8 * Math.sin((4 * Math.PI * (t - 9)) / 24);
-  return Math.max(2.0, Math.min(12.0, capacity));
+  if (!_energyCacheInitialized) {
+    for (let i = 0; i < 24; i++) {
+      const t = i;
+      const capacity = 7.5 + 3.0 * Math.sin((2 * Math.PI * (t - 6)) / 24) + 1.8 * Math.sin((4 * Math.PI * (t - 9)) / 24);
+      _energyCapacityCache[i] = Math.max(2.0, Math.min(12.0, capacity));
+    }
+    _energyCacheInitialized = true;
+  }
+  return _energyCapacityCache[Math.floor(hour) % 24];
 }
 
 /**
@@ -199,7 +208,9 @@ export function checkConflictsForDay(dayOfWeek, routines) {
     activeRoutines.forEach(r => {
       const startMin = r.targetHour * 60;
       const endMin = startMin + r.duration;
-      const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+      const minEnd = endMin < hourEndMin ? endMin : hourEndMin;
+        const maxStart = startMin > hourStartMin ? startMin : hourStartMin;
+        const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
       if (overlap > 0) {
         energyDemand += r.energy * (overlap / 60);
       }
@@ -247,7 +258,8 @@ export function checkConflictsForDay(dayOfWeek, routines) {
       // We only check consecutive or adjacent elements for rest padding and habit stacking
       if (j === i + 1 && gap >= 0) {
         // Rest padding check
-        const requiredRestPadding = Math.max(0, (r1.energy - 2) * 10);
+        const diff = (r1.energy - 2) * 10;
+        const requiredRestPadding = diff > 0 ? diff : 0;
         if (gap < requiredRestPadding) {
           warnings.push({
             type: 'REST_PADDING_VIOLATION',
@@ -326,7 +338,9 @@ export function scoreHourForRoutine(hour, routine, otherRoutines) {
       dayRoutines.forEach(r => {
         const startMin = r.targetHour * 60;
         const endMin = startMin + r.duration;
-        const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+        const minEnd = endMin < hourEndMin ? endMin : hourEndMin;
+        const maxStart = startMin > hourStartMin ? startMin : hourStartMin;
+        const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
         if (overlap > 0) {
           energyDemand += r.energy * (overlap / 60);
         }
@@ -408,9 +422,9 @@ function hydrate(chromosome, routines) {
  */
 export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRoutineIndices = null) {
   if (fitnessCache) {
-    const key = chromosome.join(',');
-    if (fitnessCache[key] !== undefined) {
-      return fitnessCache[key];
+    let key = ""; for(let i=0; i<chromosome.length; i++) { key += chromosome[i] + ","; }
+    if (fitnessCache.has(key)) {
+      return fitnessCache.get(key);
     }
   }
 
@@ -458,7 +472,9 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
         const start2 = targetHour2 * 60;
         const end2 = start2 + r2.duration;
         
-        const overlap = Math.max(0, Math.min(end1, end2) - Math.max(start1, start2));
+        const minEnd = end1 < end2 ? end1 : end2;
+        const maxStart = start1 > start2 ? start1 : start2;
+        const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
         if (overlap > 0) {
           score -= overlap * 100; // Large penalty for direct overlaps
         }
@@ -477,7 +493,9 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
         const targetHour = chromosome[idx];
         const startMin = targetHour * 60;
         const endMin = startMin + r.duration;
-        const overlap = Math.max(0, Math.min(endMin, hourEndMin) - Math.max(startMin, hourStartMin));
+        const minEnd = endMin < hourEndMin ? endMin : hourEndMin;
+        const maxStart = startMin > hourStartMin ? startMin : hourStartMin;
+        const overlap = minEnd > maxStart ? minEnd - maxStart : 0;
         if (overlap > 0) {
           energyDemand += r.energy * (overlap / 60);
         }
@@ -506,7 +524,8 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
       const gap = start2 - end1;
       if (gap >= 0) {
         // Rest padding check
-        const requiredRestPadding = Math.max(0, (r1.energy - 2) * 10);
+        const diff = (r1.energy - 2) * 10;
+        const requiredRestPadding = diff > 0 ? diff : 0;
         if (gap < requiredRestPadding) {
           score -= (requiredRestPadding - gap) * 20;
         }
@@ -531,8 +550,8 @@ export function evaluateFitness(chromosome, routines, fitnessCache = null, dayRo
   }
   
   if (fitnessCache) {
-    const key = chromosome.join(',');
-    fitnessCache[key] = score;
+    let key = ""; for(let i=0; i<chromosome.length; i++) { key += chromosome[i] + ","; }
+    fitnessCache.set(key, score);
   }
   
   return score;
@@ -577,7 +596,7 @@ export function optimizeAllSchedules(routines) {
   });
   
   // Initialize fitness cache for memoization
-  const fitnessCache = {};
+  const fitnessCache = new Map();
   
   let pop = [];
   

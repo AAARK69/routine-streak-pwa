@@ -274,32 +274,12 @@ export function renderStreaks(state) {
   });
   statsCompletions.textContent = totalLoggedCompletions;
 
-  // Calculate yield percentage of completed items over scheduled days
+  // Calculate yield percentage and render 30-Day Activity Grid Heatmap
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
   
   const today = new Date();
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
 
-    // How many scheduled on this day
-    const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
-    totalScheduledSlots += scheduledRoutines.length;
-
-    // How many completed on this day
-    const completedIds = state.completions[dateStr] || [];
-    // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
-    totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
-
-  // 2. Renders 30-Day Activity Grid Heatmap
   const heatmapGrid = document.getElementById('streak-heatmap-grid');
   const heatmapFragment = document.createDocumentFragment();
 
@@ -309,9 +289,15 @@ export function renderStreaks(state) {
     const dateStr = date.toISOString().split('T')[0];
     const dayOfWeek = date.getDay();
 
+    // Calculate metrics
     const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
+    const completedIds = state.completions[dateStr] || [];
+    const completed = completedIds.filter(id => activeRoutineIds.has(id));
 
+    totalScheduledSlots += scheduled.length;
+    totalCompletedSlots += completed.length;
+
+    // Render Heatmap Cell
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
       const pct = completed.length / scheduled.length;
@@ -330,6 +316,9 @@ export function renderStreaks(state) {
 
     heatmapFragment.appendChild(cell);
   }
+
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);

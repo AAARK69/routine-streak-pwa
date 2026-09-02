@@ -561,7 +561,11 @@ export function renderYearGrid(state, onDayClick = null) {
     for (let day = 1; day <= month.days; day++) {
       const cellDate = new Date(2026, mIndex, day);
       const dow = cellDate.getDay();
-      const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+
+      // OPTIMIZATION: Manually pad string components for faster inner loop date building
+      const mStr = (mIndex + 1) < 10 ? '0' + (mIndex + 1) : (mIndex + 1);
+      const dStr = day < 10 ? '0' + day : day;
+      const dateStr = '2026-' + mStr + '-' + dStr;
       
       const isFuture = cellDate > todayMidnight;
       
@@ -575,7 +579,11 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
-        sortedRoutinesForCells.forEach(rt => {
+        // OPTIMIZATION: Extract Map lookup outside of inner loop
+        const completionsOnDate = completionSets.get(dateStr);
+
+        for (let i = 0; i < sortedRoutinesForCells.length; i++) {
+          const rt = sortedRoutinesForCells[i];
           const isScheduled = rt.days.includes(dow);
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
           
@@ -586,7 +594,6 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
               const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
@@ -598,7 +605,7 @@ export function renderYearGrid(state, onDayClick = null) {
           }
 
           subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+        }
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -609,9 +616,16 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
-      const isClickable = !isFutureCell || hasRoutinesOnDay;
+      // OPTIMIZATION: Avoid .some() traversal inside deep loop
+      let hasRoutinesOnDay = false;
+      for (let i = 0; i < sortedRoutinesForCells.length; i++) {
+          if (sortedRoutinesForCells[i].days.includes(dow)) {
+              hasRoutinesOnDay = true;
+              break;
+          }
+      }
+
+      const isClickable = !isFuture || hasRoutinesOnDay;
 
       daysHtml += `
         <button class="calendar-day-cell${isClickable ? ' clickable' : ''}" 

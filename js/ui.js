@@ -278,26 +278,10 @@ export function renderStreaks(state) {
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
   
+  // Pre-calculate the routine mappings for each day of the week to avoid O(N) array filtering
+  const scheduledByDay = [0, 1, 2, 3, 4, 5, 6].map(d => state.routines.filter(r => r.days.includes(d)));
+
   const today = new Date();
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
-
-    // How many scheduled on this day
-    const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
-    totalScheduledSlots += scheduledRoutines.length;
-
-    // How many completed on this day
-    const completedIds = state.completions[dateStr] || [];
-    // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
-    totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
 
   // 2. Renders 30-Day Activity Grid Heatmap
   const heatmapGrid = document.getElementById('streak-heatmap-grid');
@@ -309,8 +293,12 @@ export function renderStreaks(state) {
     const dateStr = date.toISOString().split('T')[0];
     const dayOfWeek = date.getDay();
 
-    const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
+    const scheduled = scheduledByDay[dayOfWeek];
+    totalScheduledSlots += scheduled.length;
+
+    const completedIds = state.completions[dateStr] || [];
+    const completed = completedIds.filter(id => activeRoutineIds.has(id));
+    totalCompletedSlots += completed.length;
 
     let intensity = 0; // default empty
     if (scheduled.length > 0) {
@@ -330,6 +318,9 @@ export function renderStreaks(state) {
 
     heatmapFragment.appendChild(cell);
   }
+
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);

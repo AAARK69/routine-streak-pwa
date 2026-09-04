@@ -540,65 +540,97 @@ export function renderYearGrid(state, onDayClick = null) {
     completionSets.set(dateStr, new Set(state.completions[dateStr]));
   });
 
+  // Precalculate the arrays and colors to avoid lookups in the loop
+  const rLen = sortedRoutinesForCells.length;
+  const routineDays = new Array(rLen);
+  const futureHtmls = new Array(rLen);
+  const compHtmls = new Array(rLen);
+  const missedHtmls = new Array(rLen);
+  const inactHtmls = new Array(rLen);
+  const routineIds = new Array(rLen);
+
+  for (let i = 0; i < rLen; i++) {
+      const rt = sortedRoutinesForCells[i];
+      let mask = 0;
+      for (let j = 0; j < rt.days.length; j++) {
+          mask |= (1 << rt.days[j]);
+      }
+      routineDays[i] = mask;
+      routineIds[i] = rt.id;
+
+      const c = CATEGORY_COLORS[rt.category] || '#00f0ff';
+      futureHtmls[i] = '<span class="calendar-sub-box future" style="--accent-color: ' + c + '"></span>';
+      compHtmls[i] = '<span class="calendar-sub-box active-completed" style="--accent-color: ' + c + '"></span>';
+      missedHtmls[i] = '<span class="calendar-sub-box active-missed" style="--accent-color: ' + c + '"></span>';
+      inactHtmls[i] = '<span class="calendar-sub-box inactive" style="--accent-color: ' + c + '"></span>';
+  }
+
+  const yearNum = 2026;
+  const tY = todayMidnight.getFullYear();
+  const tM = String(todayMidnight.getMonth() + 1).padStart(2, '0');
+  const tD = String(todayMidnight.getDate()).padStart(2, '0');
+  const todayStr = `${tY}-${tM}-${tD}`;
+
+  let currentDow = new Date(yearNum, 0, 1).getDay();
+
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
     monthCard.className = 'month-card';
 
-    // Calculate starting weekday for 2026
-    const firstDayOfWeek = new Date(2026, mIndex, 1).getDay();
-
     let daysHtml = '';
     
     // 1. Render empty grid cells for padding
-    for (let i = 0; i < firstDayOfWeek; i++) {
+    for (let i = 0; i < currentDow; i++) {
       daysHtml += '<span class="calendar-day-cell empty"></span>';
     }
 
     let scheduledDaysInMonth = 0;
     let completedDaysInMonth = 0;
 
+    const mStr = (mIndex + 1).toString().padStart(2, '0');
+
     // 2. Render actual calendar days (1 to month.days)
     for (let day = 1; day <= month.days; day++) {
-      const cellDate = new Date(2026, mIndex, day);
-      const dow = cellDate.getDay();
-      const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      const dowBit = 1 << currentDow;
+      const dStr = day < 10 ? '0' + day : day.toString();
+      const dateStr = '2026-' + mStr + '-' + dStr;
       
-      const isFuture = cellDate > todayMidnight;
+      const isFuture = dateStr > todayStr;
       
       let subBoxesHtml = '';
+      let hasRoutinesOnDay = false;
 
-      if (sortedRoutinesForCells.length === 0) {
+      if (rLen === 0) {
         // Blank slate visual
         const statusClass = isFuture ? 'future' : 'inactive';
-        subBoxesHtml = `<span class="calendar-sub-box ${statusClass}"></span>`;
+        subBoxesHtml = '<span class="calendar-sub-box ' + statusClass + '"></span>';
       } else {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
+        const completionsOnDate = completionSets.get(dateStr);
 
-        sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
-          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
-          
-          let statusClass = 'inactive';
-
-          if (isScheduled) {
+        let htmlChunks = [];
+        for (let i = 0; i < rLen; i++) {
+          if ((routineDays[i] & dowBit) !== 0) {
             hasActiveRoutine = true;
+            hasRoutinesOnDay = true;
+
             if (isFuture) {
-              statusClass = 'future';
+              htmlChunks.push(futureHtmls[i]);
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
-              const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
-              if (isDone) {
-                statusClass = 'active-completed';
+              if (completionsOnDate && completionsOnDate.has(routineIds[i])) {
+                htmlChunks.push(compHtmls[i]);
                 completedAtLeastOne = true;
               } else {
-                statusClass = 'active-missed';
+                htmlChunks.push(missedHtmls[i]);
               }
             }
+          } else {
+            htmlChunks.push(inactHtmls[i]);
           }
+        }
 
-          subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+        subBoxesHtml = htmlChunks.join('');
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -609,20 +641,19 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
-      const isClickable = !isFutureCell || hasRoutinesOnDay;
+      const isClickable = !isFuture || hasRoutinesOnDay;
 
-      daysHtml += `
-        <button class="calendar-day-cell${isClickable ? ' clickable' : ''}" 
-          data-date="${dateStr}" 
-          data-dow="${dow}"
-          aria-label="${month.name} ${day} 2026 — click to edit habit completions"
-          ${!isClickable ? 'disabled' : ''}>
-          <span class="calendar-day-number">${day}</span>
-          ${subBoxesHtml}
-        </button>
-      `;
+      daysHtml += '<button class="calendar-day-cell' + (isClickable ? ' clickable' : '') + '" ' +
+          'data-date="' + dateStr + '" ' +
+          'data-dow="' + currentDow + '" ' +
+          'aria-label="' + month.name + ' ' + day + ' 2026 — click to edit habit completions" ' +
+          (!isClickable ? 'disabled' : '') + '>' +
+          '<span class="calendar-day-number">' + day + '</span>' +
+          subBoxesHtml +
+        '</button>';
+
+      currentDow++;
+      if (currentDow === 7) currentDow = 0;
     }
 
     // Calculate month yield percentage

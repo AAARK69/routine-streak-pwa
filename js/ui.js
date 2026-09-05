@@ -525,12 +525,31 @@ export function renderYearGrid(state, onDayClick = null) {
   ];
 
   const today = new Date();
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayStrLocal = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
   
   let annualBlueDays = 0;
   
   // Sort routines consistently for day-cells as well!
   const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
+
+  // Pre-calculate subBox HTML strings for each routine for each status
+  const preassembledHtmls = {};
+  if (sortedRoutinesForCells.length > 0) {
+      sortedRoutinesForCells.forEach(rt => {
+          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+          preassembledHtmls[rt.id] = {
+              future: `<span class="calendar-sub-box future" style="--accent-color: ${color}"></span>`,
+              inactive: `<span class="calendar-sub-box inactive" style="--accent-color: ${color}"></span>`,
+              completed: `<span class="calendar-sub-box active-completed" style="--accent-color: ${color}"></span>`,
+              missed: `<span class="calendar-sub-box active-missed" style="--accent-color: ${color}"></span>`
+          };
+      });
+  } else {
+      preassembledHtmls['empty'] = {
+          future: `<span class="calendar-sub-box future"></span>`,
+          inactive: `<span class="calendar-sub-box inactive"></span>`
+      };
+  }
 
   const yearFragment = document.createDocumentFragment();
 
@@ -539,6 +558,15 @@ export function renderYearGrid(state, onDayClick = null) {
   Object.keys(state.completions).forEach(dateStr => {
     completionSets.set(dateStr, new Set(state.completions[dateStr]));
   });
+
+  // Calculate routine schedules for fast day-of-week checks
+  const routinesMask = sortedRoutinesForCells.map(rt => {
+      let m = 0;
+      for (const d of rt.days) m |= (1 << d);
+      return m;
+  });
+
+  const numRoutines = sortedRoutinesForCells.length;
 
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
@@ -557,48 +585,49 @@ export function renderYearGrid(state, onDayClick = null) {
     let scheduledDaysInMonth = 0;
     let completedDaysInMonth = 0;
 
+    const mStr = mIndex < 9 ? '0' + (mIndex + 1) : (mIndex + 1);
+
     // 2. Render actual calendar days (1 to month.days)
     for (let day = 1; day <= month.days; day++) {
-      const cellDate = new Date(2026, mIndex, day);
-      const dow = cellDate.getDay();
-      const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      const dow = (firstDayOfWeek + day - 1) % 7;
+      const dowMask = 1 << dow;
+
+      const dStr = day < 10 ? '0' + day : day;
+      const dateStr = '2026-' + mStr + '-' + dStr;
       
-      const isFuture = cellDate > todayMidnight;
+      const isFuture = dateStr > todayStrLocal;
       
       let subBoxesHtml = '';
 
-      if (sortedRoutinesForCells.length === 0) {
+      if (numRoutines === 0) {
         // Blank slate visual
-        const statusClass = isFuture ? 'future' : 'inactive';
-        subBoxesHtml = `<span class="calendar-sub-box ${statusClass}"></span>`;
+        subBoxesHtml = isFuture ? preassembledHtmls['empty'].future : preassembledHtmls['empty'].inactive;
       } else {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
+        const completionsOnDate = completionSets.get(dateStr);
 
-        sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
-          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+        for (let i = 0; i < numRoutines; i++) {
+          const rt = sortedRoutinesForCells[i];
+          const isScheduled = (routinesMask[i] & dowMask) !== 0;
           
-          let statusClass = 'inactive';
-
           if (isScheduled) {
             hasActiveRoutine = true;
             if (isFuture) {
-              statusClass = 'future';
+              subBoxesHtml += preassembledHtmls[rt.id].future;
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
               const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
-                statusClass = 'active-completed';
+                subBoxesHtml += preassembledHtmls[rt.id].completed;
                 completedAtLeastOne = true;
               } else {
-                statusClass = 'active-missed';
+                subBoxesHtml += preassembledHtmls[rt.id].missed;
               }
             }
+          } else {
+              subBoxesHtml += preassembledHtmls[rt.id].inactive;
           }
-
-          subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+        }
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -609,20 +638,19 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
-      const isClickable = !isFutureCell || hasRoutinesOnDay;
+      let hasRoutinesOnDay = false;
+      for (let i = 0; i < numRoutines; i++) {
+          if ((routinesMask[i] & dowMask) !== 0) {
+              hasRoutinesOnDay = true;
+              break;
+          }
+      }
 
-      daysHtml += `
-        <button class="calendar-day-cell${isClickable ? ' clickable' : ''}" 
-          data-date="${dateStr}" 
-          data-dow="${dow}"
-          aria-label="${month.name} ${day} 2026 — click to edit habit completions"
-          ${!isClickable ? 'disabled' : ''}>
-          <span class="calendar-day-number">${day}</span>
-          ${subBoxesHtml}
-        </button>
-      `;
+      const isClickable = !isFuture || hasRoutinesOnDay;
+      const clsClickable = isClickable ? ' clickable' : '';
+      const clsDisabled = !isClickable ? 'disabled' : '';
+
+      daysHtml += '<button class="calendar-day-cell' + clsClickable + '" data-date="' + dateStr + '" data-dow="' + dow + '" aria-label="' + month.name + ' ' + day + ' 2026 — click to edit habit completions" ' + clsDisabled + '><span class="calendar-day-number">' + day + '</span>' + subBoxesHtml + '</button>';
     }
 
     // Calculate month yield percentage

@@ -278,28 +278,17 @@ export function renderStreaks(state) {
   let totalScheduledSlots = 0;
   let totalCompletedSlots = 0;
   
+  // Pre-calculate routine counts per day of week to avoid O(N) array filtering inside the loop
+  const routineCountsByDay = [0, 0, 0, 0, 0, 0, 0];
+  state.routines.forEach(r => {
+    if (r.days) {
+      r.days.forEach(day => routineCountsByDay[day]++);
+    }
+  });
+
   const today = new Date();
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay();
 
-    // How many scheduled on this day
-    const scheduledRoutines = state.routines.filter(r => r.days.includes(dayOfWeek));
-    totalScheduledSlots += scheduledRoutines.length;
-
-    // How many completed on this day
-    const completedIds = state.completions[dateStr] || [];
-    // Count only completions of routines currently defined
-    const validCompletions = completedIds.filter(id => activeRoutineIds.has(id));
-    totalCompletedSlots += validCompletions.length;
-  }
-
-  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
-  statsAverage.textContent = `${yieldRate}%`;
-
-  // 2. Renders 30-Day Activity Grid Heatmap
+  // 2. Renders 30-Day Activity Grid Heatmap and Yield Rate simultaneously
   const heatmapGrid = document.getElementById('streak-heatmap-grid');
   const heatmapFragment = document.createDocumentFragment();
 
@@ -309,12 +298,23 @@ export function renderStreaks(state) {
     const dateStr = date.toISOString().split('T')[0];
     const dayOfWeek = date.getDay();
 
-    const scheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
-    const completed = (state.completions[dateStr] || []).filter(id => activeRoutineIds.has(id));
+    const scheduledCount = routineCountsByDay[dayOfWeek];
+    const completedIds = state.completions[dateStr] || [];
+
+    // Fast count without intermediate array allocations
+    let completedCount = 0;
+    for (let j = 0; j < completedIds.length; j++) {
+      if (activeRoutineIds.has(completedIds[j])) {
+        completedCount++;
+      }
+    }
+
+    totalScheduledSlots += scheduledCount;
+    totalCompletedSlots += completedCount;
 
     let intensity = 0; // default empty
-    if (scheduled.length > 0) {
-      const pct = completed.length / scheduled.length;
+    if (scheduledCount > 0) {
+      const pct = completedCount / scheduledCount;
       if (pct === 0) intensity = 0;
       else if (pct < 0.4) intensity = 1;
       else if (pct < 0.8) intensity = 2;
@@ -326,10 +326,13 @@ export function renderStreaks(state) {
     
     // Simple native tooltip description
     const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    cell.title = `${formattedDate}: Completed ${completed.length}/${scheduled.length} (${Math.round((scheduled.length > 0 ? completed.length/scheduled.length : 0)*100)}%)`;
+    cell.title = `${formattedDate}: Completed ${completedCount}/${scheduledCount} (${Math.round((scheduledCount > 0 ? completedCount/scheduledCount : 0)*100)}%)`;
 
     heatmapFragment.appendChild(cell);
   }
+
+  const yieldRate = totalScheduledSlots > 0 ? Math.round((totalCompletedSlots / totalScheduledSlots) * 100) : 0;
+  statsAverage.textContent = `${yieldRate}%`;
 
   heatmapGrid.innerHTML = '';
   heatmapGrid.appendChild(heatmapFragment);

@@ -525,7 +525,8 @@ export function renderYearGrid(state, onDayClick = null) {
   ];
 
   const today = new Date();
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  // Format local date string explicitly to avoid UTC mismatch with toISOString().split('T')[0]
+  const localTodayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
   
   let annualBlueDays = 0;
   
@@ -538,6 +539,20 @@ export function renderYearGrid(state, onDayClick = null) {
   const completionSets = new Map();
   Object.keys(state.completions).forEach(dateStr => {
     completionSets.set(dateStr, new Set(state.completions[dateStr]));
+  });
+
+  // OPTIMIZATION: Pre-calculate standard HTML string chunks outside the deep loop
+  const chunks = sortedRoutinesForCells.map(rt => {
+    const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+    return {
+      id: rt.id,
+      // Pre-evaluate string includes by bitmask or boolean array to avoid O(N) days.includes(dow) inside the 365-day loop
+      scheduledDow: [0, 1, 2, 3, 4, 5, 6].map(d => rt.days && rt.days.includes(d)),
+      inactive: `<span class="calendar-sub-box inactive" style="--accent-color: ${color}"></span>`,
+      future: `<span class="calendar-sub-box future" style="--accent-color: ${color}"></span>`,
+      activeCompleted: `<span class="calendar-sub-box active-completed" style="--accent-color: ${color}"></span>`,
+      activeMissed: `<span class="calendar-sub-box active-missed" style="--accent-color: ${color}"></span>`
+    };
   });
 
   MONTHS.forEach((month, mIndex) => {
@@ -559,11 +574,12 @@ export function renderYearGrid(state, onDayClick = null) {
 
     // 2. Render actual calendar days (1 to month.days)
     for (let day = 1; day <= month.days; day++) {
-      const cellDate = new Date(2026, mIndex, day);
-      const dow = cellDate.getDay();
+      // Manual Day-Of-Week counter prevents creating a new Date() object for every day
+      const dow = (firstDayOfWeek + day - 1) % 7;
       const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
       
-      const isFuture = cellDate > todayMidnight;
+      // Compare strings directly instead of Date objects
+      const isFuture = dateStr > localTodayStr;
       
       let subBoxesHtml = '';
 
@@ -575,30 +591,30 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
-        sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
-          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
-          
-          let statusClass = 'inactive';
+        const completionsOnDate = completionSets.get(dateStr);
 
+        // Pre-computed HTML string blocks instead of using slow string interpolations inside a deep loop
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          const isScheduled = chunk.scheduledDow[dow];
+          
           if (isScheduled) {
             hasActiveRoutine = true;
             if (isFuture) {
-              statusClass = 'future';
+              subBoxesHtml += chunk.future;
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
-              const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
+              const isDone = completionsOnDate ? completionsOnDate.has(chunk.id) : false;
               if (isDone) {
-                statusClass = 'active-completed';
+                subBoxesHtml += chunk.activeCompleted;
                 completedAtLeastOne = true;
               } else {
-                statusClass = 'active-missed';
+                subBoxesHtml += chunk.activeMissed;
               }
             }
+          } else {
+            subBoxesHtml += chunk.inactive;
           }
-
-          subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+        }
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -609,20 +625,17 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
-      const isClickable = !isFutureCell || hasRoutinesOnDay;
+      let hasRoutinesOnDay = false;
+      for (let i = 0; i < chunks.length; i++) {
+         if (chunks[i].scheduledDow[dow]) {
+            hasRoutinesOnDay = true;
+            break;
+         }
+      }
+      const isClickable = !isFuture || hasRoutinesOnDay;
 
-      daysHtml += `
-        <button class="calendar-day-cell${isClickable ? ' clickable' : ''}" 
-          data-date="${dateStr}" 
-          data-dow="${dow}"
-          aria-label="${month.name} ${day} 2026 — click to edit habit completions"
-          ${!isClickable ? 'disabled' : ''}>
-          <span class="calendar-day-number">${day}</span>
-          ${subBoxesHtml}
-        </button>
-      `;
+      // Faster string concat using standard '+' operator than interpolating a massive template literal
+      daysHtml += `<button class="calendar-day-cell${isClickable ? ' clickable' : ''}" data-date="${dateStr}" data-dow="${dow}" aria-label="${month.name} ${day} 2026 — click to edit habit completions" ${!isClickable ? 'disabled' : ''}><span class="calendar-day-number">${day}</span>${subBoxesHtml}</button>`;
     }
 
     // Calculate month yield percentage

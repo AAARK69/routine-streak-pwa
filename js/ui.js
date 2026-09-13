@@ -434,6 +434,13 @@ export function renderTopBarStats(state) {
   let isFirstCheck = true;
   let daysChecked = 0;
 
+  // ⚡ BOLT OPTIMIZATION: Pre-calculate schedules per DOW to avoid O(N) array filtering in the deep loop
+  const dowScheduledCounts = [0, 0, 0, 0, 0, 0, 0];
+  for (let r = 0; r < state.routines.length; r++) {
+    const days = state.routines[r].days;
+    for (let d = 0; d < days.length; d++) dowScheduledCounts[days[d]]++;
+  }
+
   while (!streakBroken) {
     daysChecked++;
     if (daysChecked > 365) {
@@ -441,21 +448,26 @@ export function renderTopBarStats(state) {
     }
 
     const checkStr = checkDate.toISOString().split('T')[0];
-    const completedOnDay = state.completions[checkStr] || [];
+    const completedOnDay = state.completions[checkStr];
     
-    // Count only currently valid routines completed
-    const validComps = completedOnDay.filter(id => activeRoutineIds.has(id));
+    // ⚡ BOLT OPTIMIZATION: Traditional loop instead of intermediate array allocation (.filter)
+    let validCompsCount = 0;
+    if (completedOnDay) {
+      for (let j = 0; j < completedOnDay.length; j++) {
+        if (activeRoutineIds.has(completedOnDay[j])) validCompsCount++;
+      }
+    }
     const dayOfWeek = checkDate.getDay();
-    const routinesScheduled = state.routines.filter(r => r.days.includes(dayOfWeek));
+    const routinesScheduledCount = dowScheduledCounts[dayOfWeek];
 
-    if (validComps.length > 0) {
+    if (validCompsCount > 0) {
       globalStreak++;
     } else {
       // If it's today and they have scheduled routines but haven't completed any yet,
       // don't break the streak unless they completed nothing yesterday too.
-      if (isFirstCheck && checkStr === todayStr && routinesScheduled.length > 0) {
+      if (isFirstCheck && checkStr === todayStr && routinesScheduledCount > 0) {
         // Keep checking yesterday
-      } else if (routinesScheduled.length === 0) {
+      } else if (routinesScheduledCount === 0) {
         // If nothing was scheduled, a miss doesn't break the streak
       } else {
         streakBroken = true;

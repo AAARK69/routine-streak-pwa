@@ -525,12 +525,25 @@ export function renderYearGrid(state, onDayClick = null) {
   ];
 
   const today = new Date();
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   
   let annualBlueDays = 0;
   
   // Sort routines consistently for day-cells as well!
   const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
+
+  // OPTIMIZATION: Pre-calculate integer bitmasks and template segments for sub-boxes
+  const routineBitmasks = sortedRoutinesForCells.map(rt => {
+    let mask = 0;
+    rt.days.forEach(d => mask |= (1 << d));
+    const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+    return {
+      id: rt.id,
+      dayMask: mask,
+      htmlPrefix: `<span class="calendar-sub-box `,
+      htmlSuffix: `" style="--accent-color: ${color}"></span>`
+    };
+  });
 
   const yearFragment = document.createDocumentFragment();
 
@@ -540,12 +553,14 @@ export function renderYearGrid(state, onDayClick = null) {
     completionSets.set(dateStr, new Set(state.completions[dateStr]));
   });
 
+  // Track day of week using modulo 7 starting from Jan 1 2026 (Thursday = 4)
+  let currentDow = 4;
+
   MONTHS.forEach((month, mIndex) => {
     const monthCard = document.createElement('div');
     monthCard.className = 'month-card';
 
-    // Calculate starting weekday for 2026
-    const firstDayOfWeek = new Date(2026, mIndex, 1).getDay();
+    const firstDayOfWeek = currentDow;
 
     let daysHtml = '';
     
@@ -556,18 +571,18 @@ export function renderYearGrid(state, onDayClick = null) {
 
     let scheduledDaysInMonth = 0;
     let completedDaysInMonth = 0;
+    const monthStr = String(mIndex + 1).padStart(2, '0');
 
     // 2. Render actual calendar days (1 to month.days)
     for (let day = 1; day <= month.days; day++) {
-      const cellDate = new Date(2026, mIndex, day);
-      const dow = cellDate.getDay();
-      const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      const dow = currentDow;
+      const dateStr = `2026-${monthStr}-${String(day).padStart(2, '0')}`;
       
-      const isFuture = cellDate > todayMidnight;
+      const isFuture = dateStr > todayStr;
       
       let subBoxesHtml = '';
 
-      if (sortedRoutinesForCells.length === 0) {
+      if (routineBitmasks.length === 0) {
         // Blank slate visual
         const statusClass = isFuture ? 'future' : 'inactive';
         subBoxesHtml = `<span class="calendar-sub-box ${statusClass}"></span>`;
@@ -575,9 +590,11 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
-        sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
-          const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
+        const completionsOnDate = completionSets.get(dateStr);
+
+        for (let j = 0; j < routineBitmasks.length; j++) {
+          const rt = routineBitmasks[j];
+          const isScheduled = (rt.dayMask & (1 << dow)) !== 0;
           
           let statusClass = 'inactive';
 
@@ -586,7 +603,6 @@ export function renderYearGrid(state, onDayClick = null) {
             if (isFuture) {
               statusClass = 'future';
             } else {
-              const completionsOnDate = completionSets.get(dateStr);
               const isDone = completionsOnDate ? completionsOnDate.has(rt.id) : false;
               if (isDone) {
                 statusClass = 'active-completed';
@@ -597,8 +613,8 @@ export function renderYearGrid(state, onDayClick = null) {
             }
           }
 
-          subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+          subBoxesHtml += rt.htmlPrefix + statusClass + rt.htmlSuffix;
+        }
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -609,9 +625,8 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
-      const isClickable = !isFutureCell || hasRoutinesOnDay;
+      const hasRoutinesOnDay = routineBitmasks.some(rt => (rt.dayMask & (1 << dow)) !== 0);
+      const isClickable = !isFuture || hasRoutinesOnDay;
 
       daysHtml += `
         <button class="calendar-day-cell${isClickable ? ' clickable' : ''}" 
@@ -623,6 +638,8 @@ export function renderYearGrid(state, onDayClick = null) {
           ${subBoxesHtml}
         </button>
       `;
+
+      currentDow = (currentDow + 1) % 7;
     }
 
     // Calculate month yield percentage

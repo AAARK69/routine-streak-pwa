@@ -532,6 +532,25 @@ export function renderYearGrid(state, onDayClick = null) {
   // Sort routines consistently for day-cells as well!
   const sortedRoutinesForCells = [...state.routines].sort((a, b) => a.id.localeCompare(b.id));
 
+  // OPTIMIZATION: Pre-calculate routine schedules to avoid O(N) filtering in 365-day loop
+  const isScheduledCache = new Array(sortedRoutinesForCells.length);
+  for (let i = 0; i < sortedRoutinesForCells.length; i++) {
+    isScheduledCache[i] = new Array(7).fill(false);
+    const rtDays = sortedRoutinesForCells[i].days;
+    for (let j = 0; j < rtDays.length; j++) {
+      isScheduledCache[i][rtDays[j]] = true;
+    }
+  }
+  const hasRoutinesOnDayMemo = new Array(7).fill(false);
+  for (let d = 0; d < 7; d++) {
+    for (let r = 0; r < sortedRoutinesForCells.length; r++) {
+      if (isScheduledCache[r][d]) {
+        hasRoutinesOnDayMemo[d] = true;
+        break;
+      }
+    }
+  }
+
   const yearFragment = document.createDocumentFragment();
 
   // Pre-map completion arrays to Sets for O(1) lookup inside the deep loop
@@ -575,8 +594,9 @@ export function renderYearGrid(state, onDayClick = null) {
         let hasActiveRoutine = false;
         let completedAtLeastOne = false;
 
-        sortedRoutinesForCells.forEach(rt => {
-          const isScheduled = rt.days.includes(dow);
+        for (let r = 0; r < sortedRoutinesForCells.length; r++) {
+          const rt = sortedRoutinesForCells[r];
+          const isScheduled = isScheduledCache[r][dow];
           const color = CATEGORY_COLORS[rt.category] || '#00f0ff';
           
           let statusClass = 'inactive';
@@ -598,7 +618,7 @@ export function renderYearGrid(state, onDayClick = null) {
           }
 
           subBoxesHtml += `<span class="calendar-sub-box ${statusClass}" style="--accent-color: ${color}"></span>`;
-        });
+        }
 
         if (hasActiveRoutine && !isFuture) {
           scheduledDaysInMonth++;
@@ -610,7 +630,7 @@ export function renderYearGrid(state, onDayClick = null) {
       }
 
       const isFutureCell = cellDate > todayMidnight;
-      const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
+      const hasRoutinesOnDay = hasRoutinesOnDayMemo[dow];
       const isClickable = !isFutureCell || hasRoutinesOnDay;
 
       daysHtml += `

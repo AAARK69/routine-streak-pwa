@@ -525,7 +525,7 @@ export function renderYearGrid(state, onDayClick = null) {
   ];
 
   const today = new Date();
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
   
   let annualBlueDays = 0;
   
@@ -545,12 +545,12 @@ export function renderYearGrid(state, onDayClick = null) {
     monthCard.className = 'month-card';
 
     // Calculate starting weekday for 2026
-    const firstDayOfWeek = new Date(2026, mIndex, 1).getDay();
+    let currentDow = new Date(2026, mIndex, 1).getDay();
 
     let daysHtml = '';
     
     // 1. Render empty grid cells for padding
-    for (let i = 0; i < firstDayOfWeek; i++) {
+    for (let i = 0; i < currentDow; i++) {
       daysHtml += '<span class="calendar-day-cell empty"></span>';
     }
 
@@ -559,11 +559,10 @@ export function renderYearGrid(state, onDayClick = null) {
 
     // 2. Render actual calendar days (1 to month.days)
     for (let day = 1; day <= month.days; day++) {
-      const cellDate = new Date(2026, mIndex, day);
-      const dow = cellDate.getDay();
+      const dow = currentDow;
       const dateStr = `2026-${(mIndex + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
       
-      const isFuture = cellDate > todayMidnight;
+      const isFuture = dateStr > todayStr;
       
       let subBoxesHtml = '';
 
@@ -609,7 +608,7 @@ export function renderYearGrid(state, onDayClick = null) {
         }
       }
 
-      const isFutureCell = cellDate > todayMidnight;
+      const isFutureCell = isFuture;
       const hasRoutinesOnDay = sortedRoutinesForCells.some(rt => rt.days.includes(dow));
       const isClickable = !isFutureCell || hasRoutinesOnDay;
 
@@ -623,6 +622,8 @@ export function renderYearGrid(state, onDayClick = null) {
           ${subBoxesHtml}
         </button>
       `;
+
+      currentDow = currentDow === 6 ? 0 : currentDow + 1;
     }
 
     // Calculate month yield percentage

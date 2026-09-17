@@ -29,10 +29,20 @@ export function getBlockForHour(hour) {
  * C(t) = 7.5 + 3.0 * sin(2 * pi * (t - 6) / 24) + 1.8 * sin(4 * pi * (t - 9) / 24)
  * Returns values between 2.0 and 12.0 representing hourly energy capacity.
  */
-export function getEnergyCapacity(hour) {
-  const t = hour;
+const ENERGY_CACHE = new Float32Array(24);
+for (let i = 0; i < 24; i++) {
+  const t = i;
   const capacity = 7.5 + 3.0 * Math.sin((2 * Math.PI * (t - 6)) / 24) + 1.8 * Math.sin((4 * Math.PI * (t - 9)) / 24);
-  return Math.max(2.0, Math.min(12.0, capacity));
+  ENERGY_CACHE[i] = Math.max(2.0, Math.min(12.0, capacity));
+}
+
+// ⚡ Bolt: Memoized expensive Math.sin calculations into a Float32Array
+// Since input 'hour' is always an integer 0-23 inside the hot evaluation loops,
+// reading from cache avoids millions of redundant math operations per schedule optimization.
+export function getEnergyCapacity(hour) {
+  // Use modulo in case 'hour' input accidentally exceeds 23 or is negative (handle wrap-around logic)
+  const safeIndex = ((Math.floor(hour) % 24) + 24) % 24;
+  return ENERGY_CACHE[safeIndex];
 }
 
 /**
